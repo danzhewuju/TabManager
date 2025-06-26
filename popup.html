@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tab Manager</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>标签页管理器</h1>
+            <div class="header-actions">
+                <button id="selectAll" class="btn btn-secondary">全选</button>
+                <button id="selectNone" class="btn btn-secondary">取消全选</button>
+            </div>
+        </header>
+        
+        <div class="search-container">
+            <div class="search-input-group">
+                <input type="text" id="searchInput" placeholder="搜索标签页..." class="search-input">
+                <button id="regexToggle" class="btn btn-regex" title="切换正则匹配模式">
+                    <span id="regexIcon">.*</span>
+                </button>
+            </div>
+            <div class="search-options">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="caseSensitive">
+                    <span>区分大小写</span>
+                </label>
+            </div>
+        </div>
+        
+        <div class="tabs-container">
+            <div id="tabsList" class="tabs-list">
+                <!-- 标签页列表将在这里动态生成 -->
+            </div>
+        </div>
+        
+        <footer class="footer">
+            <div class="stats">
+                <span id="selectedCount">已选择: 0</span>
+                <span id="totalCount">总计: 0</span>
+            </div>
+            <div class="actions">
+                <button id="deleteSelected" class="btn btn-danger" disabled>删除选中 (0)</button>
+                <button id="closePopup" class="btn btn-secondary">关闭</button>
+            </div>
+        </footer>
+    </div>
+    
+    <script src="popup.js"></script>
+</body>
+</html> 
