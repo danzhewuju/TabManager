@@ -1,5 +1,7 @@
 # Tab Manager - 快速删除标签页 Chrome 扩展
 
+![Tab Manager 截图](images/image.png)
+
 ## 功能简介
 
 Tab Manager 是一款高效、简洁的 Chrome 浏览器扩展，帮助你快速管理和批量关闭不需要的标签页。无论你是标签页重度用户，还是偶尔需要整理浏览器窗口，这款插件都能极大提升你的工作效率。
