@@ -6,6 +6,8 @@
 
 Tab Manager 是一款高效、简洁的 Chrome 浏览器扩展，帮助你快速管理和批量关闭不需要的标签页。无论你是标签页重度用户，还是偶尔需要整理浏览器窗口，这款插件都能极大提升你的工作效率。
 
+chromewebstore : [插件市场](https://chromewebstore.google.com/detail/iodkllilcebomffdnfakfmneenhfnplm?utm_source=item-share-cb)
+
 ## 主要功能
 
 - **标签页一览**：一键查看当前窗口下所有可关闭的标签页（自动排除 chrome:// 等系统标签页）。
