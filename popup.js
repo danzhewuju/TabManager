@@ -46,12 +46,6 @@ class TabManager {
             this.toggleRegexMode();
         });
 
-        // 区分大小写选项
-        document.getElementById('caseSensitive').addEventListener('change', (e) => {
-            this.isCaseSensitive = e.target.checked;
-            this.filterTabs(document.getElementById('searchInput').value);
-        });
-
         // 搜索功能
         document.getElementById('searchInput').addEventListener('input', (e) => {
             this.filterTabs(e.target.value);
@@ -60,6 +54,16 @@ class TabManager {
         // 键盘快捷键
         document.addEventListener('keydown', (e) => {
             this.handleKeyboardShortcuts(e);
+        });
+
+        // 全选复选框
+        document.getElementById('selectAllCheckbox').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                this.selectAllTabs();
+            } else {
+                this.clearSelection();
+            }
+            this.syncSelectAllCheckbox();
         });
     }
 
@@ -157,9 +161,11 @@ class TabManager {
             if (checkbox) {
                 checkbox.addEventListener('change', (e) => {
                     this.toggleTabSelection(tab.id, e.target.checked);
+                    this.syncSelectAllCheckbox();
                 });
             }
         });
+        this.syncSelectAllCheckbox();
     }
 
     createTabElement(tab) {
@@ -198,6 +204,7 @@ class TabManager {
             this.selectedTabs.add(tab.id);
         });
         this.renderTabs();
+        this.syncSelectAllCheckbox();
         this.updateStats();
         this.updateDeleteButton();
     }
@@ -205,6 +212,7 @@ class TabManager {
     clearSelection() {
         this.selectedTabs.clear();
         this.renderTabs();
+        this.syncSelectAllCheckbox();
         this.updateStats();
         this.updateDeleteButton();
     }
@@ -400,6 +408,14 @@ class TabManager {
                 }
             }, 300);
         }, 3000);
+    }
+
+    // 新增：同步全选复选框状态
+    syncSelectAllCheckbox() {
+        const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+        if (!selectAllCheckbox) return;
+        const allSelected = this.filteredTabs.length > 0 && this.filteredTabs.every(tab => this.selectedTabs.has(tab.id));
+        selectAllCheckbox.checked = allSelected;
     }
 }
 
