@@ -1,3 +1,5 @@
+const TOP_KEYWORDS_COUNT = 5; // 可根据需要修改显示数量
+
 class TabManager {
     constructor() {
         this.tabs = [];
@@ -13,6 +15,7 @@ class TabManager {
         await this.loadTabs();
         this.renderTabs();
         this.updateStats();
+        this.renderKeywordSuggestions();
         this.showKeyboardShortcuts();
     }
 
@@ -126,8 +129,9 @@ class TabManager {
                 this.tabs = tabs.filter(tab => !tab.url.startsWith('chrome://'));
                 this.filteredTabs = [...this.tabs];
             }
+            this.renderKeywordSuggestions();
         } catch (error) {
-            console.error('加载标签页失败:', error);
+            console.error('加载标签页失败:', error, error && error.stack, this.tabs);
             this.showError('加载标签页失败');
         }
     }
@@ -166,12 +170,12 @@ class TabManager {
             }
         });
         this.syncSelectAllCheckbox();
+        this.renderKeywordSuggestions();
     }
 
     createTabElement(tab) {
         const isSelected = this.selectedTabs.has(tab.id);
         const favicon = tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23ccc"/></svg>';
-        
         return `
             <div class="tab-item ${isSelected ? 'selected' : ''}" data-tab-id="${tab.id}">
                 <input type="checkbox" 
@@ -180,8 +184,8 @@ class TabManager {
                        ${isSelected ? 'checked' : ''}>
                 <img src="${favicon}" alt="favicon" class="tab-favicon" onerror="this.style.display='none'">
                 <div class="tab-content">
-                    <div class="tab-title" title="${tab.title}">${this.escapeHtml(tab.title)}</div>
-                    <div class="tab-url" title="${tab.url}">${this.escapeHtml(this.getDomain(tab.url))}</div>
+                    <span class="tab-title" title="${tab.title}">${this.escapeHtml(tab.title)}</span>
+                    <span class="tab-url" title="${tab.url}">${this.escapeHtml(this.getDomain(tab.url))}</span>
                 </div>
             </div>
         `;
@@ -245,6 +249,7 @@ class TabManager {
                     this.renderTabs();
                     this.updateStats();
                     this.updateDeleteButton();
+                    this.renderKeywordSuggestions();
                     
                     this.showSuccess(`成功删除 ${response.closedCount} 个标签页`);
                 } else {
@@ -262,6 +267,7 @@ class TabManager {
                 this.renderTabs();
                 this.updateStats();
                 this.updateDeleteButton();
+                this.renderKeywordSuggestions();
                 
                 this.showSuccess(`成功删除 ${tabIds.length} 个标签页`);
             }
@@ -289,6 +295,7 @@ class TabManager {
         
         this.renderTabs();
         this.updateStats();
+        this.renderKeywordSuggestions();
     }
 
     matchesRegex(tab, pattern) {
@@ -361,10 +368,11 @@ class TabManager {
 
     getDomain(url) {
         try {
+            if (!url) return '';
             const urlObj = new URL(url);
             return urlObj.hostname;
         } catch {
-            return url;
+            return '';
         }
     }
 
@@ -419,6 +427,80 @@ class TabManager {
         if (!selectAllCheckbox) return;
         const allSelected = this.filteredTabs.length > 0 && this.filteredTabs.every(tab => this.selectedTabs.has(tab.id));
         selectAllCheckbox.checked = allSelected;
+    }
+
+    // 关键词提取与渲染
+    extractKeywords() {
+        const keywordMap = new Map();
+        this.tabs.forEach(tab => {
+            try {
+                if (!tab.url) return;
+                const hostname = this.getDomain(tab.url);
+                if (!hostname) return;
+                // 只取主域名部分（如 bilibili.com -> bilibili）
+                let keyword = hostname.split('.').slice(-2, -1)[0] || hostname;
+                if (keyword) {
+                    keyword = keyword.toLowerCase();
+                    if (!keywordMap.has(keyword)) {
+                        keywordMap.set(keyword, { count: 0, tabIds: [] });
+                    }
+                    keywordMap.get(keyword).count++;
+                    keywordMap.get(keyword).tabIds.push(tab.id);
+                }
+            } catch (e) {
+                // 跳过异常 tab
+            }
+        });
+        // 排序并取前 N 个
+        return Array.from(keywordMap.entries())
+            .sort((a, b) => b[1].count - a[1].count)
+            .slice(0, TOP_KEYWORDS_COUNT)
+            .map(([keyword, info]) => ({ keyword, count: info.count, tabIds: info.tabIds }));
+    }
+
+    renderKeywordSuggestions() {
+        const container = document.getElementById('keywordSuggestions');
+        if (!container) return;
+        const keywords = this.extractKeywords();
+        if (keywords.length === 0) {
+            container.innerHTML = '';
+            return;
+        }
+        // 计算最大最小数量
+        const counts = keywords.map(k => k.count);
+        const maxCount = Math.max(...counts);
+        const minCount = Math.min(...counts);
+        // 颜色插值函数：数量多->红，数量少->蓝
+        function getBgColor(count) {
+            if (maxCount === minCount) {
+                // 全部一样，给中间色
+                return 'background: #e3eaff; color: #333;';
+            }
+            // 线性插值 HSL: 220(蓝) -> 0(红)
+            const hue = 220 - ((count - minCount) / (maxCount - minCount)) * 220;
+            return `background: hsl(${hue}, 100%, 92%); color: #333;`;
+        }
+        container.innerHTML = keywords.map(k => {
+            const allSelected = k.tabIds.every(id => this.selectedTabs.has(id));
+            return `<button class="keyword-btn${allSelected ? ' active' : ''}" data-keyword="${k.keyword}" title="${k.keyword}" style="${getBgColor(k.count)}">${k.keyword} (${k.count})</button>`;
+        }).join('');
+        // 绑定点击事件
+        container.querySelectorAll('.keyword-btn').forEach(btn => {
+            btn.onclick = (e) => {
+                const keyword = btn.getAttribute('data-keyword');
+                const k = keywords.find(x => x.keyword === keyword);
+                if (k && k.tabIds.every(id => this.selectedTabs.has(id))) {
+                    k.tabIds.forEach(id => this.selectedTabs.delete(id));
+                } else if (k) {
+                    k.tabIds.forEach(id => this.selectedTabs.add(id));
+                }
+                this.renderTabs();
+                this.syncSelectAllCheckbox();
+                this.updateStats();
+                this.updateDeleteButton();
+                this.renderKeywordSuggestions();
+            };
+        });
     }
 }
 
