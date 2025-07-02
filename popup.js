@@ -210,7 +210,10 @@ class TabManager {
     }
 
     clearSelection() {
-        this.selectedTabs.clear();
+        // 只取消当前筛选结果的选中状态
+        this.filteredTabs.forEach(tab => {
+            this.selectedTabs.delete(tab.id);
+        });
         this.renderTabs();
         this.syncSelectAllCheckbox();
         this.updateStats();
