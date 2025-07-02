@@ -168,6 +168,20 @@ class TabManager {
                     this.syncSelectAllCheckbox();
                 });
             }
+            // 绑定 tab-item 点击事件（排除复选框）
+            const tabItem = document.querySelector(`.tab-item[data-tab-id="${tab.id}"]`);
+            if (tabItem) {
+                tabItem.addEventListener('click', (e) => {
+                    // 如果点击的是复选框，忽略
+                    if (e.target.classList.contains('tab-checkbox')) return;
+                    // 激活标签页
+                    chrome.tabs.update(tab.id, {active: true});
+                    // 激活窗口（如果不在当前窗口）
+                    if (tab.windowId !== undefined) {
+                        chrome.windows.update(tab.windowId, {focused: true});
+                    }
+                });
+            }
         });
         this.syncSelectAllCheckbox();
         this.renderKeywordSuggestions();
