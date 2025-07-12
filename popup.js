@@ -348,7 +348,7 @@ class TabManager {
         const totalCount = document.getElementById('totalCount');
         
         selectedCount.textContent = `已选择: ${this.selectedTabs.size}`;
-        totalCount.textContent = `总计: ${this.filteredTabs.length}`;
+        totalCount.textContent = `总计: ${this.tabs.length}`;
     }
 
     updateDeleteButton() {
