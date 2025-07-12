@@ -9,7 +9,7 @@ body {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     min-height: 100vh;
 }
-
+/* 插件的布局 */
 .container {
     width: 400px;
     min-height: 500px;
@@ -337,14 +337,56 @@ body {
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
-    transition: background 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s;
+    transition: all 0.2s ease;
     box-shadow: 0 1px 2px rgba(100,100,100,0.04);
     outline: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 28px;
 }
 
-.keyword-btn:hover, .keyword-btn.active {
+.keyword-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.12);
+}
+
+.keyword-btn.active {
     background: #667eea;
     color: #fff;
     border-color: #667eea;
-    box-shadow: 0 2px 8px rgba(102,126,234,0.10);
+    box-shadow: 0 2px 8px rgba(102,126,234,0.3);
+}
+
+.keyword-icon {
+    font-size: 12px;
+    opacity: 0.8;
+}
+
+.keyword-text {
+    font-weight: 600;
+}
+
+.keyword-count {
+    font-size: 11px;
+    opacity: 0.8;
+    font-weight: normal;
+}
+
+/* 域名关键词特殊样式 */
+.domain-keyword {
+    border-left: 3px solid #1976d2;
+}
+
+.domain-keyword:hover {
+    border-color: #1976d2;
+}
+
+/* 标题关键词特殊样式 */
+.title-keyword {
+    border-left: 3px solid #2e7d32;
+}
+
+.title-keyword:hover {
+    border-color: #2e7d32;
 } 
