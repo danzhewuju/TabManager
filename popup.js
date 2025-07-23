@@ -114,13 +114,42 @@ class TabManager {
         this.filterTabs(document.getElementById('searchInput').value);
     }
 
+    // 新增：标签页排序方法
+    sortTabs(tabs) {
+        return tabs.sort((a, b) => {
+            // 首先将激活的标签页置顶
+            if (a.active && !b.active) return -1;
+            if (!a.active && b.active) return 1;
+            
+            // 获取当前窗口（通常是最近使用的窗口）
+            // 这里我们假设 windowId 较大的是较新的窗口
+            const currentWindowIds = [...new Set(tabs.map(tab => tab.windowId))].sort((x, y) => y - x);
+            const currentWindowId = currentWindowIds[0];
+            
+            // 当前窗口的标签页优先
+            const aIsCurrent = a.windowId === currentWindowId;
+            const bIsCurrent = b.windowId === currentWindowId;
+            
+            if (aIsCurrent && !bIsCurrent) return -1;
+            if (!aIsCurrent && bIsCurrent) return 1;
+            
+            // 在同一窗口内，按标签页位置排序：右边的标签页（index大的）优先
+            if (a.windowId === b.windowId) {
+                return b.index - a.index;
+            }
+            
+            // 不同窗口间，按窗口ID排序（较新的窗口优先）
+            return b.windowId - a.windowId;
+        });
+    }
+
     async loadTabs() {
         try {
             if (this.isStandalone) {
                 // 在独立标签页模式下，通过消息获取标签页
                 const response = await this.sendMessage({ action: 'getTabs' });
                 if (response.success) {
-                    this.tabs = response.tabs;
+                    this.tabs = this.sortTabs(response.tabs);
                     this.filteredTabs = [...this.tabs];
                 } else {
                     throw new Error(response.error);
@@ -128,7 +157,7 @@ class TabManager {
             } else {
                 // 在 popup 模式下，直接获取标签页
                 const tabs = await chrome.tabs.query({});
-                this.tabs = tabs.filter(tab => !tab.url.startsWith('chrome://'));
+                this.tabs = this.sortTabs(tabs.filter(tab => !tab.url.startsWith('chrome://')));
                 this.filteredTabs = [...this.tabs];
             }
             
@@ -197,15 +226,29 @@ class TabManager {
     createTabElement(tab) {
         const isSelected = this.selectedTabs.has(tab.id);
         const favicon = tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23ccc"/></svg>';
+        
+        // 获取该窗口的标签页总数，计算相对位置
+        const windowTabs = this.tabs.filter(t => t.windowId === tab.windowId);
+        const totalTabsInWindow = windowTabs.length;
+        const isRightSideTab = tab.index >= Math.floor(totalTabsInWindow / 2);
+        
+        // 添加激活标签页和位置指示器
+        const activeIndicator = tab.active ? '<span class="active-indicator" title="当前激活的标签页">🔹</span>' : '';
+        const positionClass = tab.active ? 'active-tab' : (isRightSideTab ? 'right-tab' : '');
+        
         return `
-            <div class="tab-item ${isSelected ? 'selected' : ''}" data-tab-id="${tab.id}">
+            <div class="tab-item ${isSelected ? 'selected' : ''} ${positionClass}" data-tab-id="${tab.id}">
                 <input type="checkbox" 
                        id="tab-${tab.id}" 
                        class="tab-checkbox" 
                        ${isSelected ? 'checked' : ''}>
                 <img src="${favicon}" alt="favicon" class="tab-favicon" onerror="this.style.display='none'">
                 <div class="tab-content">
-                    <span class="tab-title" title="${tab.title}">${this.escapeHtml(tab.title)}</span>
+                    <div class="tab-title-row">
+                        <span class="tab-title" title="${tab.title}">${this.escapeHtml(tab.title)}</span>
+                        ${activeIndicator}
+                        <span class="tab-position" title="标签页位置: ${tab.index + 1}/${totalTabsInWindow}">#${tab.index + 1}</span>
+                    </div>
                     <span class="tab-url" title="${tab.url}">${this.escapeHtml(this.getDomain(tab.url))}</span>
                 </div>
             </div>
@@ -321,6 +364,9 @@ class TabManager {
                 });
             }
         }
+        
+        // 对筛选后的结果也进行排序
+        this.filteredTabs = this.sortTabs(this.filteredTabs);
         
         this.renderTabs();
         this.updateStats();

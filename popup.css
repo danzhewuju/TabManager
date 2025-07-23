@@ -58,22 +58,49 @@ body {
 }
 
 .header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    padding: 20px 24px 16px;
+    background-color: white;
+    border-bottom: 1px solid #e9ecef;
+    position: sticky;
+    top: 0;
+    z-index: 10;
 }
 
 .header h1 {
     font-size: 18px;
     font-weight: 600;
+    color: #202124;
+    margin: 0;
+    flex: 1;
+}
+
+.sort-info {
+    margin: 0 16px;
+}
+
+.sort-info span {
+    font-size: 12px;
+    color: #1976d2;
+    background-color: #e3f2fd;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-weight: 500;
+    cursor: help;
+    white-space: nowrap;
 }
 
 .header-actions {
     display: flex;
     gap: 8px;
+}
+
+.header-actions .btn {
+    font-size: 12px;
+    padding: 6px 12px;
+    white-space: nowrap;
 }
 
 .search-container {
@@ -194,14 +221,62 @@ body {
     min-width: 0;
 }
 
+.tab-title-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
 .tab-title {
     font-size: 14px;
     font-weight: 500;
     color: #202124;
-    margin-bottom: 4px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+}
+
+.active-indicator {
+    font-size: 12px;
+    color: #1976d2;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+}
+
+.tab-position {
+    font-size: 10px;
+    color: #9aa0a6;
+    background-color: #f1f3f4;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.tab-item.active-tab {
+    background-color: #e8f0fe;
+    border-left: 4px solid #1976d2;
+}
+
+.tab-item.active-tab:hover {
+    background-color: #e8f0fe;
+}
+
+.tab-item.active-tab .tab-position {
+    background-color: #1976d2;
+    color: white;
+}
+
+.tab-item.right-tab .tab-position {
+    background-color: #e8f5e8;
+    color: #2e7d32;
 }
 
 .tab-url {
