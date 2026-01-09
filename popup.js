@@ -40,14 +40,26 @@ class TabManager {
         if (openSidePanelBtn) {
             openSidePanelBtn.addEventListener('click', async () => {
                 try {
+                    // 在 popup / 独立窗口里点击“侧边栏”后，自动关闭当前界面；
+                    // 但在侧边栏自身（panel=1）里不要关闭自己。
+                    const shouldCloseAfterOpen = !this.isPanel;
+
                     // Side Panel API 不可用时，自动降级为“常驻窗口版”
                     if (!chrome.sidePanel || typeof chrome.sidePanel.open !== 'function') {
                         await this.openStandaloneWindow();
+                        if (shouldCloseAfterOpen) {
+                            window.close();
+                            return;
+                        }
                         this.showSuccess('侧边栏不可用：已打开常驻窗口');
                         return;
                     }
 
                     await this.openSidePanel();
+                    if (shouldCloseAfterOpen) {
+                        window.close();
+                        return;
+                    }
                     this.showSuccess('已在侧边栏打开');
                 } catch (e) {
                     this.showError(`打开侧边栏失败：${String(e && e.message ? e.message : e)}`);
