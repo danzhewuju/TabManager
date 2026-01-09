@@ -14,11 +14,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
             if (message.action === 'getTabs') {
                 const tabs = await chrome.tabs.query({});
-                const filtered = (tabs || []).filter((t) => {
-                    const url = t && typeof t.url === 'string' ? t.url : '';
-                    return url && !url.startsWith('chrome://');
-                });
-                sendResponse({ success: true, tabs: filtered });
+                // 归一化：保证 url/title 为字符串；优先使用 pendingUrl 兜底（例如还未加载完成的标签页）
+                const normalized = (tabs || []).map((t) => ({
+                    ...t,
+                    url: (t && typeof t.url === 'string' && t.url) ? t.url : (t && typeof t.pendingUrl === 'string' ? t.pendingUrl : ''),
+                    title: (t && typeof t.title === 'string') ? t.title : '',
+                }));
+                // 需求：chrome:// 等系统页面、以及“空 tab”（无 url）也纳入管理
+                sendResponse({ success: true, tabs: normalized });
                 return;
             }
 

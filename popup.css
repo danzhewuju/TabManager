@@ -170,22 +170,6 @@ body.panel .container {
     flex: 1;
 }
 
-.sort-info {
-    margin: 0 10px;
-}
-
-.sort-info span {
-    font-size: 11px;
-    color: var(--muted);
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid var(--border-2);
-    padding: 4px 8px;
-    border-radius: 999px;
-    font-weight: 600;
-    cursor: help;
-    white-space: nowrap;
-}
-
 .header-actions {
     display: flex;
     gap: 6px;
@@ -310,6 +294,48 @@ body.panel .container {
     transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
 }
 
+.tabs-list.is-dragging,
+.tabs-list.is-dragging * {
+    user-select: none;
+}
+
+.tab-item.tab-drag-placeholder {
+    border: 1px dashed rgba(34, 211, 238, 0.35);
+    background: rgba(34, 211, 238, 0.08);
+    box-shadow: none;
+}
+
+.tab-item.tab-drag-source {
+    opacity: 0.2;
+}
+
+.tab-drag-ghost {
+    position: fixed;
+    z-index: 9999;
+    opacity: 0.92;
+    filter: drop-shadow(0 18px 34px rgba(0, 0, 0, 0.55));
+    transform: translate3d(0, 0, 0);
+    pointer-events: none;
+}
+
+.tab-drag-badge {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(34, 211, 238, 0.22);
+    border: 1px solid rgba(34, 211, 238, 0.35);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 700;
+    backdrop-filter: blur(10px);
+}
+
+.tab-item.tab-drag-hidden {
+    display: none;
+}
+
 .tab-item::after {
     content: attr(data-tooltip);
     position: absolute;
@@ -386,17 +412,6 @@ body.panel .container {
     min-width: 0;
 }
 
-.active-indicator {
-    font-size: 12px;
-    color: var(--accent);
-    animation: pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 0.7; }
-    50% { opacity: 1; }
-}
-
 .tab-position {
     font-size: 10px;
     color: var(--muted-2);
@@ -407,27 +422,6 @@ body.panel .container {
     font-weight: 500;
     white-space: nowrap;
     font-family: var(--mono);
-}
-
-.tab-item.active-tab {
-    background: rgba(34, 211, 238, 0.10);
-    border-color: rgba(34, 211, 238, 0.22);
-}
-
-.tab-item.active-tab:hover {
-    background: rgba(34, 211, 238, 0.10);
-}
-
-.tab-item.active-tab .tab-position {
-    background-color: var(--accent);
-    color: white;
-    border-color: rgba(255, 255, 255, 0.25);
-}
-
-.tab-item.right-tab .tab-position {
-    background-color: rgba(16, 185, 129, 0.12);
-    color: rgba(134, 239, 172, 0.95);
-    border-color: rgba(16, 185, 129, 0.22);
 }
 
 .tab-url {

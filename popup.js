@@ -12,6 +12,28 @@ class TabManager {
         this.keywordCache = null; // 关键词缓存
         this.lastTabsHash = null; // 标签页数据哈希，用于判断是否需要重新计算
         this._layoutRaf = null;
+        this._tabsRefreshTimer = null;
+        this._tabsRefreshInFlight = false;
+        this._tabsRefreshQueued = false;
+        this._suppressClickUntil = 0;
+        this._drag = {
+            pressTimer: null,
+            active: false,
+            pointerId: null,
+            startX: 0,
+            startY: 0,
+            offsetX: 0,
+            offsetY: 0,
+            tabId: null,
+            tabIds: [],
+            windowId: null,
+            sourceEl: null,
+            sourceEls: [],
+            placeholderEl: null,
+            placeholderEls: [],
+            ghostEl: null,
+            cleanupMoveUp: null,
+        };
 
         if (this.isStandalone) {
             document.documentElement.classList.add('standalone');
@@ -27,6 +49,7 @@ class TabManager {
 
     async init() {
         this.bindEvents();
+        this.enableLiveTabRefresh();
         await this.loadTabs();
         this.renderTabs();
         this.updateStats();
@@ -125,6 +148,87 @@ class TabManager {
     // 说明：Chrome 扩展 popup 在切换焦点（激活标签页/窗口）时会自动关闭，无法阻止。
     // 如果未来需要“常驻窗口版”，可以再恢复独立窗口逻辑。
 
+    enableLiveTabRefresh() {
+        // 只有“常驻”的页面才需要实时刷新：侧边栏 & 常驻窗口
+        if (!this.isPanel && !this.isStandalone) return;
+        if (!chrome || !chrome.tabs) return;
+
+        const schedule = () => this.scheduleTabsRefresh();
+
+        // 新建/关闭/移动/跨窗口移动
+        if (chrome.tabs.onCreated) chrome.tabs.onCreated.addListener(schedule);
+        if (chrome.tabs.onRemoved) chrome.tabs.onRemoved.addListener(schedule);
+        if (chrome.tabs.onMoved) chrome.tabs.onMoved.addListener(schedule);
+        if (chrome.tabs.onAttached) chrome.tabs.onAttached.addListener(schedule);
+        if (chrome.tabs.onDetached) chrome.tabs.onDetached.addListener(schedule);
+
+        // 激活标签页/切换窗口可能会影响“展示顺序”（跟随 Chrome 的返回顺序/窗口聚焦变化）
+        if (chrome.tabs.onActivated) chrome.tabs.onActivated.addListener(schedule);
+        if (chrome.windows && chrome.windows.onFocusChanged) chrome.windows.onFocusChanged.addListener(schedule);
+
+        // 更新事件很频繁：只在会影响展示的字段变化时刷新
+        if (chrome.tabs.onUpdated) {
+            chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+                if (!changeInfo) return;
+                if (
+                    changeInfo.status === 'complete' ||
+                    typeof changeInfo.title === 'string' ||
+                    typeof changeInfo.url === 'string' ||
+                    typeof changeInfo.favIconUrl === 'string'
+                ) {
+                    schedule();
+                }
+            });
+        }
+    }
+
+    scheduleTabsRefresh() {
+        // 拖拽中不要刷新，避免 DOM 被重绘打断拖拽
+        if (this._drag.active) {
+            this._tabsRefreshQueued = true;
+            return;
+        }
+        // 150ms 去抖：避免 onUpdated 等事件造成频繁重绘
+        if (this._tabsRefreshTimer) clearTimeout(this._tabsRefreshTimer);
+        this._tabsRefreshTimer = setTimeout(() => {
+            this._tabsRefreshTimer = null;
+            this.refreshTabsSilently();
+        }, 150);
+    }
+
+    async refreshTabsSilently() {
+        // 合并并发刷新：如果上一次刷新还没结束，则只排队一次
+        if (this._tabsRefreshInFlight) {
+            this._tabsRefreshQueued = true;
+            return;
+        }
+        this._tabsRefreshInFlight = true;
+        this._tabsRefreshQueued = false;
+
+        try {
+            const searchTerm = (document.getElementById('searchInput')?.value ?? '').toString();
+            await this.loadTabs({ silent: true });
+
+            // 剔除已不存在的选中项
+            const idSet = new Set(this.tabs.map(t => t.id));
+            for (const id of Array.from(this.selectedTabs)) {
+                if (!idSet.has(id)) this.selectedTabs.delete(id);
+            }
+
+            // 保留当前筛选条件并刷新 UI
+            this.filterTabs(searchTerm);
+            this.updateDeleteButton();
+        } catch (err) {
+            console.warn('实时刷新标签页失败:', err);
+        } finally {
+            this._tabsRefreshInFlight = false;
+            if (this._tabsRefreshQueued) {
+                // 如果刷新过程中又来了事件，再补一次（依然走去抖）
+                this.scheduleTabsRefresh();
+            }
+        }
+    }
+
     scheduleLayoutUpdate() {
         if (this._layoutRaf) cancelAnimationFrame(this._layoutRaf);
         this._layoutRaf = requestAnimationFrame(() => {
@@ -198,42 +302,21 @@ class TabManager {
         this.filterTabs(document.getElementById('searchInput').value);
     }
 
-    // 新增：标签页排序方法
-    sortTabs(tabs) {
-        return tabs.sort((a, b) => {
-            // 首先将激活的标签页置顶
-            if (a.active && !b.active) return -1;
-            if (!a.active && b.active) return 1;
-            
-            // 获取当前窗口（通常是最近使用的窗口）
-            // 这里我们假设 windowId 较大的是较新的窗口
-            const currentWindowIds = [...new Set(tabs.map(tab => tab.windowId))].sort((x, y) => y - x);
-            const currentWindowId = currentWindowIds[0];
-            
-            // 当前窗口的标签页优先
-            const aIsCurrent = a.windowId === currentWindowId;
-            const bIsCurrent = b.windowId === currentWindowId;
-            
-            if (aIsCurrent && !bIsCurrent) return -1;
-            if (!aIsCurrent && bIsCurrent) return 1;
-            
-            // 在同一窗口内，按标签页位置排序：右边的标签页（index大的）优先
-            if (a.windowId === b.windowId) {
-                return b.index - a.index;
-            }
-            
-            // 不同窗口间，按窗口ID排序（较新的窗口优先）
-            return b.windowId - a.windowId;
-        });
-    }
-
-    async loadTabs() {
+    async loadTabs({ silent = false } = {}) {
         try {
+            const normalizeTab = (tab) => {
+                const url =
+                    (tab && typeof tab.url === 'string' && tab.url) ? tab.url :
+                    (tab && typeof tab.pendingUrl === 'string' ? tab.pendingUrl : '');
+                const title = (tab && typeof tab.title === 'string') ? tab.title : '';
+                return { ...tab, url, title };
+            };
+
             if (this.isStandalone) {
                 // 在独立标签页模式下，通过消息获取标签页
                 const response = await this.sendMessage({ action: 'getTabs' });
                 if (response.success) {
-                    this.tabs = this.sortTabs(response.tabs);
+                    this.tabs = (response.tabs || []).map(normalizeTab);
                     this.filteredTabs = [...this.tabs];
                 } else {
                     throw new Error(response.error);
@@ -241,7 +324,8 @@ class TabManager {
             } else {
                 // 在 popup 模式下，直接获取标签页
                 const tabs = await chrome.tabs.query({});
-                this.tabs = this.sortTabs(tabs.filter(tab => !tab.url.startsWith('chrome://')));
+                // 需求：chrome:// 等系统页面、以及“空 tab”（无 url）也纳入管理
+                this.tabs = (tabs || []).map(normalizeTab);
                 this.filteredTabs = [...this.tabs];
             }
             
@@ -252,7 +336,7 @@ class TabManager {
             this.renderKeywordSuggestions();
         } catch (error) {
             console.error('加载标签页失败:', error, error && error.stack, this.tabs);
-            this.showError('加载标签页失败');
+            if (!silent) this.showError('加载标签页失败');
         }
     }
 
@@ -341,6 +425,7 @@ class TabManager {
             const tabItem = document.querySelector(`.tab-item[data-tab-id="${tab.id}"]`);
             if (tabItem) {
                 tabItem.addEventListener('click', (e) => {
+                    if (Date.now() < this._suppressClickUntil) return;
                     // 如果点击的是复选框，忽略
                     if (e.target.classList.contains('tab-checkbox')) return;
                     // 激活标签页
@@ -350,6 +435,9 @@ class TabManager {
                         chrome.windows.update(tab.windowId, {focused: true});
                     }
                 });
+
+                // 长按拖拽排序（仅同一窗口内）
+                this.bindLongPressDrag(tabItem, tab);
             }
         });
         this.syncSelectAllCheckbox();
@@ -364,17 +452,16 @@ class TabManager {
         const isSelected = this.selectedTabs.has(tab.id);
         const favicon = tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23ccc"/></svg>';
         
-        // 获取该窗口的标签页总数，计算相对位置
+        // 获取该窗口的标签页总数，计算位置提示
         const windowTabs = this.tabs.filter(t => t.windowId === tab.windowId);
         const totalTabsInWindow = windowTabs.length;
-        const isRightSideTab = tab.index >= Math.floor(totalTabsInWindow / 2);
         
-        // 添加激活标签页和位置指示器
-        const activeIndicator = tab.active ? '<span class="active-indicator" title="当前激活的标签页">🔹</span>' : '';
-        const positionClass = tab.active ? 'active-tab' : (isRightSideTab ? 'right-tab' : '');
-        
+        const safeTitle = (tab.title && String(tab.title).trim().length > 0)
+            ? tab.title
+            : (tab.url && String(tab.url).trim().length > 0 ? tab.url : '(空白标签页)');
+
         return `
-            <div class="tab-item ${isSelected ? 'selected' : ''} ${positionClass}" data-tab-id="${tab.id}" data-tooltip="点击跳转">
+            <div class="tab-item ${isSelected ? 'selected' : ''}" data-tab-id="${tab.id}" data-window-id="${tab.windowId}" data-tooltip="点击跳转（长按可拖动排序）">
                 <input type="checkbox" 
                        id="tab-${tab.id}" 
                        class="tab-checkbox" 
@@ -382,14 +469,307 @@ class TabManager {
                 <img src="${favicon}" alt="favicon" class="tab-favicon" onerror="this.style.display='none'">
                 <div class="tab-content">
                     <div class="tab-title-row">
-                        <span class="tab-title" title="${tab.title}">${this.escapeHtml(tab.title)}</span>
-                        ${activeIndicator}
+                        <span class="tab-title" title="${this.escapeHtml(safeTitle)}">${this.escapeHtml(safeTitle)}</span>
                         <span class="tab-position" title="标签页位置: ${tab.index + 1}/${totalTabsInWindow}">#${tab.index + 1}</span>
                     </div>
-                    <span class="tab-url" title="${tab.url}">${this.escapeHtml(this.getDomain(tab.url))}</span>
+                    <span class="tab-url" title="${this.escapeHtml(tab.url || '')}">${this.escapeHtml(this.getDomain(tab.url))}</span>
                 </div>
             </div>
         `;
+    }
+
+    bindLongPressDrag(tabItem, tab) {
+        // 搜索过滤时无法可靠计算 window 内 index（会漏掉隐藏的 tab），因此仅允许“无搜索”时拖拽
+        const isFiltering = () => {
+            const v = document.getElementById('searchInput')?.value ?? '';
+            return String(v).trim().length > 0;
+        };
+
+        tabItem.addEventListener('pointerdown', (e) => {
+            if (e.button !== undefined && e.button !== 0) return; // 只响应左键/触摸
+            if (this._drag.active) return;
+            if (Date.now() < this._suppressClickUntil) return;
+
+            // 点击复选框不进入拖拽
+            if (e.target && (e.target.classList?.contains('tab-checkbox') || e.target.closest?.('.tab-checkbox'))) {
+                return;
+            }
+
+            if (isFiltering()) {
+                // 轻提示：清空搜索后再拖拽
+                this.showError('请先清空搜索，再长按拖动排序');
+                return;
+            }
+
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const pointerId = e.pointerId;
+
+            this._drag.pointerId = pointerId;
+            this._drag.startX = startX;
+            this._drag.startY = startY;
+            this._drag.sourceEl = tabItem;
+            this._drag.tabId = tab.id;
+            this._drag.windowId = tab.windowId;
+            this._drag.tabIds = [];
+            this._drag.sourceEls = [];
+            this._drag.placeholderEls = [];
+
+            const cancelPress = () => {
+                if (this._drag.pressTimer) {
+                    clearTimeout(this._drag.pressTimer);
+                    this._drag.pressTimer = null;
+                }
+            };
+
+            const onMoveBeforeStart = (ev) => {
+                if (ev.pointerId !== pointerId) return;
+                const dx = ev.clientX - startX;
+                const dy = ev.clientY - startY;
+                if (Math.hypot(dx, dy) > 8) {
+                    cancelPress();
+                    window.removeEventListener('pointermove', onMoveBeforeStart, true);
+                    window.removeEventListener('pointerup', onUpBeforeStart, true);
+                    window.removeEventListener('pointercancel', onUpBeforeStart, true);
+                }
+            };
+            const onUpBeforeStart = (ev) => {
+                if (ev.pointerId !== pointerId) return;
+                cancelPress();
+                window.removeEventListener('pointermove', onMoveBeforeStart, true);
+                window.removeEventListener('pointerup', onUpBeforeStart, true);
+                window.removeEventListener('pointercancel', onUpBeforeStart, true);
+            };
+
+            window.addEventListener('pointermove', onMoveBeforeStart, true);
+            window.addEventListener('pointerup', onUpBeforeStart, true);
+            window.addEventListener('pointercancel', onUpBeforeStart, true);
+
+            // 280ms 长按进入拖拽
+            this._drag.pressTimer = setTimeout(() => {
+                this._drag.pressTimer = null;
+                window.removeEventListener('pointermove', onMoveBeforeStart, true);
+                window.removeEventListener('pointerup', onUpBeforeStart, true);
+                window.removeEventListener('pointercancel', onUpBeforeStart, true);
+                this.startTabDrag(e);
+            }, 280);
+        }, { passive: true });
+    }
+
+    startTabDrag(startEvent) {
+        const sourceEl = this._drag.sourceEl;
+        if (!sourceEl) return;
+
+        const tabsList = document.getElementById('tabsList');
+        if (!tabsList) return;
+
+        // 计算“拖拽集合”：如果长按的是已选中的 tab，并且同窗口存在多选，则整体拖动
+        const pressedId = this._drag.tabId;
+        const pressedWindowId = this._drag.windowId;
+        const selectedInSameWindow = Array.from(this.selectedTabs).filter((id) => {
+            const t = this.tabs.find(x => x.id === id);
+            return t && t.windowId === pressedWindowId;
+        });
+
+        const isPressedSelected = pressedId != null && this.selectedTabs.has(pressedId);
+        const dragIds = (isPressedSelected && selectedInSameWindow.length > 1)
+            ? selectedInSameWindow
+            : [pressedId];
+
+        this._drag.tabIds = dragIds.filter((x) => typeof x === 'number');
+        this._drag.sourceEls = this._drag.tabIds
+            .map((id) => document.querySelector(`.tab-item[data-tab-id="${id}"]`))
+            .filter(Boolean);
+
+        // 如果没找到对应 DOM（极少数情况下），回退为单个
+        if (this._drag.sourceEls.length === 0) {
+            this._drag.tabIds = [pressedId];
+            this._drag.sourceEls = [sourceEl];
+        }
+
+        const rect = sourceEl.getBoundingClientRect();
+        this._drag.offsetX = startEvent.clientX - rect.left;
+        this._drag.offsetY = startEvent.clientY - rect.top;
+
+        // placeholders（支持多选整体拖动：用 N 个占位块表示）
+        const placeholders = this._drag.tabIds.map(() => {
+            const ph = document.createElement('div');
+            ph.className = 'tab-item tab-drag-placeholder';
+            ph.setAttribute('data-window-id', String(this._drag.windowId));
+            ph.style.height = `${rect.height}px`;
+            ph.style.width = `${rect.width}px`;
+            return ph;
+        });
+        this._drag.placeholderEls = placeholders;
+        this._drag.placeholderEl = placeholders[0] || null;
+        // 把 placeholders 插到 sourceEl 后面，保持拖拽的“插入点”默认在原位置附近
+        let insertRef = sourceEl.nextSibling;
+        placeholders.forEach((ph) => {
+            tabsList.insertBefore(ph, insertRef);
+        });
+
+        // ghost
+        const ghost = sourceEl.cloneNode(true);
+        ghost.classList.add('tab-drag-ghost');
+        if (this._drag.tabIds.length > 1) {
+            const badge = document.createElement('div');
+            badge.className = 'tab-drag-badge';
+            badge.textContent = `${this._drag.tabIds.length} 个`;
+            ghost.appendChild(badge);
+        }
+        ghost.style.width = `${rect.width}px`;
+        ghost.style.height = `${rect.height}px`;
+        ghost.style.left = `${rect.left}px`;
+        ghost.style.top = `${rect.top}px`;
+        ghost.style.transform = 'translate3d(0,0,0)';
+        ghost.style.pointerEvents = 'none';
+        document.body.appendChild(ghost);
+        this._drag.ghostEl = ghost;
+
+        // hide sources from layout（不参与 index 计算）
+        this._drag.sourceEls.forEach((el) => {
+            el.classList.add('tab-drag-hidden');
+            el.style.display = 'none';
+        });
+        tabsList.classList.add('is-dragging');
+
+        this._drag.active = true;
+
+        const onMove = (e) => this.updateTabDrag(e);
+        const onUp = (e) => this.endTabDrag(e);
+        window.addEventListener('pointermove', onMove, true);
+        window.addEventListener('pointerup', onUp, true);
+        window.addEventListener('pointercancel', onUp, true);
+        this._drag.cleanupMoveUp = () => {
+            window.removeEventListener('pointermove', onMove, true);
+            window.removeEventListener('pointerup', onUp, true);
+            window.removeEventListener('pointercancel', onUp, true);
+        };
+    }
+
+    updateTabDrag(e) {
+        if (!this._drag.active) return;
+        if (this._drag.pointerId !== null && e.pointerId !== this._drag.pointerId) return;
+
+        const ghost = this._drag.ghostEl;
+        const placeholder = this._drag.placeholderEl;
+        const placeholders = this._drag.placeholderEls;
+        const windowId = String(this._drag.windowId);
+        if (!ghost || !placeholder || !placeholders || placeholders.length === 0) return;
+
+        const x = e.clientX - this._drag.offsetX;
+        const y = e.clientY - this._drag.offsetY;
+        ghost.style.transform = `translate3d(${x - parseFloat(ghost.style.left)}px, ${y - parseFloat(ghost.style.top)}px, 0)`;
+
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const overItem = el && el.closest ? el.closest('.tab-item') : null;
+        if (!overItem) return;
+        if (overItem === placeholder) return;
+        if (overItem.classList.contains('tab-drag-ghost') || overItem.classList.contains('tab-drag-placeholder')) return;
+        if (overItem.classList.contains('tab-drag-hidden')) return;
+        if ((overItem.getAttribute('data-window-id') ?? '') !== windowId) return; // 只允许同一窗口内拖拽
+
+        const rect = overItem.getBoundingClientRect();
+        const before = e.clientY < rect.top + rect.height / 2;
+        const parent = overItem.parentNode;
+        if (!parent) return;
+
+        const ensureContiguousPlaceholders = () => {
+            // 把剩余 placeholders 放到 anchor 后面，保持块状连续
+            for (let i = placeholders.length - 1; i >= 1; i--) {
+                parent.insertBefore(placeholders[i], placeholder.nextSibling);
+            }
+        };
+
+        if (before) {
+            if (placeholder !== overItem.previousSibling) {
+                parent.insertBefore(placeholder, overItem);
+                ensureContiguousPlaceholders();
+            }
+        } else {
+            if (placeholder !== overItem.nextSibling) {
+                parent.insertBefore(placeholder, overItem.nextSibling);
+                ensureContiguousPlaceholders();
+            }
+        }
+    }
+
+    async endTabDrag(e) {
+        if (!this._drag.active) return;
+        if (this._drag.pointerId !== null && e.pointerId !== this._drag.pointerId) return;
+
+        const tabsList = document.getElementById('tabsList');
+        const placeholder = this._drag.placeholderEl;
+        const placeholders = this._drag.placeholderEls;
+        const sourceEl = this._drag.sourceEl;
+        const ghost = this._drag.ghostEl;
+        const tabId = this._drag.tabId;
+        const tabIds = this._drag.tabIds;
+        const windowId = this._drag.windowId;
+
+        // 先清理事件监听
+        if (this._drag.cleanupMoveUp) this._drag.cleanupMoveUp();
+        this._drag.cleanupMoveUp = null;
+
+        // 防止拖拽结束触发 click 激活
+        this._suppressClickUntil = Date.now() + 400;
+
+        try {
+            if (!tabsList || !placeholder || windowId == null) return;
+
+            // 计算 placeholder 在同一窗口 tab 的顺序位置（0-based index）
+            const items = Array.from(tabsList.querySelectorAll('.tab-item'))
+                .filter((el) => !el.classList.contains('tab-drag-hidden'));
+            const sameWindow = items.filter((el) => (el.getAttribute('data-window-id') ?? '') === String(windowId));
+            const newIndex = sameWindow.findIndex((el) => el === placeholder);
+            if (newIndex >= 0) {
+                // 多选整体拖动：按当前 index 升序保持相对顺序
+                const idsToMove = Array.isArray(tabIds) && tabIds.length > 0 ? tabIds : (tabId != null ? [tabId] : []);
+                const sortedIds = idsToMove
+                    .map((id) => this.tabs.find(t => t.id === id))
+                    .filter((t) => t && t.windowId === windowId)
+                    .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+                    .map((t) => t.id);
+
+                if (sortedIds.length > 0) {
+                    await chrome.tabs.move(sortedIds, { windowId, index: newIndex });
+                }
+            }
+        } catch (err) {
+            console.warn('拖拽移动标签页失败:', err);
+            this.showError('拖拽调整标签页失败');
+        } finally {
+            // UI 清理：移除 ghost/placeholder，恢复 source（随后刷新会重绘）
+            if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
+            if (Array.isArray(placeholders)) {
+                placeholders.forEach((ph) => {
+                    if (ph && ph.parentNode) ph.parentNode.removeChild(ph);
+                });
+            } else if (placeholder && placeholder.parentNode) {
+                placeholder.parentNode.removeChild(placeholder);
+            }
+            // 恢复隐藏的源元素（即使马上会 refresh 重绘，也先恢复以防闪烁）
+            this._drag.sourceEls.forEach((el) => {
+                el.style.display = '';
+                el.classList.remove('tab-drag-hidden');
+            });
+            void sourceEl;
+            if (tabsList) tabsList.classList.remove('is-dragging');
+
+            this._drag.active = false;
+            this._drag.pointerId = null;
+            this._drag.tabId = null;
+            this._drag.tabIds = [];
+            this._drag.windowId = null;
+            this._drag.sourceEl = null;
+            this._drag.sourceEls = [];
+            this._drag.placeholderEl = null;
+            this._drag.placeholderEls = [];
+            this._drag.ghostEl = null;
+
+            // 结束后强制刷新一次，确保 index/顺序与浏览器一致
+            await this.refreshTabsSilently();
+        }
     }
 
     toggleTabSelection(tabId, isSelected) {
@@ -501,10 +881,7 @@ class TabManager {
                 });
             }
         }
-        
-        // 对筛选后的结果也进行排序
-        this.filteredTabs = this.sortTabs(this.filteredTabs);
-        
+
         this.renderTabs();
         this.updateStats();
         this.renderKeywordSuggestions();
@@ -580,11 +957,18 @@ class TabManager {
 
     getDomain(url) {
         try {
-            if (!url) return '';
+            if (!url) return '(空白标签页)';
+            if (url === 'about:blank') return 'about:blank';
             const urlObj = new URL(url);
+            // about: / file: 等 scheme 没有 hostname，用 “protocol + pathname” 做展示
+            if (!urlObj.hostname) {
+                const protocol = urlObj.protocol ? urlObj.protocol.replace(/:$/, '') : '';
+                const path = urlObj.pathname || urlObj.href || '';
+                return protocol ? `${protocol}:${path}` : (path || url);
+            }
             return urlObj.hostname;
         } catch {
-            return '';
+            return url ? String(url) : '(空白标签页)';
         }
     }
 
