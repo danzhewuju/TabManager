@@ -1,12 +1,17 @@
 {
   "manifest_version": 3,
   "name": "Tab Manager",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "快速管理和删除浏览器标签页的工具",
   "permissions": [
     "tabs",
-    "activeTab"
+    "activeTab",
+    "windows",
+    "sidePanel"
   ],
+  "side_panel": {
+    "default_path": "popup.html?panel=1"
+  },
   "action": {
     "default_popup": "popup.html",
     "default_title": "Tab Manager"

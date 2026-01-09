@@ -4,29 +4,119 @@
     box-sizing: border-box;
 }
 
+:root {
+    /* “程序员感”深色主题（VS Code / GitHub Dark-ish） */
+    --bg: #0b1220;
+    --surface: #0f172a;
+    --surface-2: #111c33;
+    --surface-3: rgba(255, 255, 255, 0.06);
+    --text: #e5e7eb;
+    --muted: #a1a1aa;
+    --muted-2: #94a3b8;
+    --border: rgba(255, 255, 255, 0.10);
+    --border-2: rgba(255, 255, 255, 0.07);
+    --accent: #22d3ee; /* cyan */
+    --accent-weak: rgba(34, 211, 238, 0.16);
+    --success: #22c55e;
+    --danger: #f43f5e;
+    --radius: 16px;
+    --radius-sm: 12px;
+    --shadow-lg: 0 28px 70px rgba(0, 0, 0, 0.55);
+    --shadow-md: 0 14px 34px rgba(0, 0, 0, 0.42);
+    --shadow-sm: 0 6px 16px rgba(0, 0, 0, 0.35);
+    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+/* Chrome 扩展 popup 的窗口尺寸最好直接由 html/body 决定，
+   否则某些情况下会出现窗口被算成很窄导致内容被裁切。 */
+html, body {
+    width: 520px;
+    height: 600px;
+    overflow: hidden;
+}
+
+/* 独立窗口模式：填满窗口，不受 popup 固定尺寸影响 */
+html.standalone, body.standalone {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* 侧边栏模式同样视作“填满容器” */
+html.panel, body.panel {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    min-height: 100vh;
+    font-size: 14px;
+    line-height: 1.35;
+    color: var(--text);
+    background:
+        radial-gradient(1100px circle at 80% -10%, rgba(34, 211, 238, 0.16), transparent 55%),
+        radial-gradient(900px circle at -10% 100%, rgba(34, 197, 94, 0.08), transparent 55%),
+        var(--bg);
 }
 /* 插件的布局 */
 .container {
-    width: 400px;
-    min-height: 500px;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+    width: 520px;
+    height: 600px;
+    min-height: 560px;
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(15, 23, 42, 0.92) 100%);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    height: 600px;
+}
+
+html.standalone .container,
+body.standalone .container {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    border-radius: 0;
+}
+
+html.panel .container,
+body.panel .container {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    border-radius: 0;
+}
+
+/* 独立标签页（或更大视口）下，做成居中/自适应布局 */
+@media (min-width: 700px) {
+    html, body {
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+    }
+
+    body {
+        min-height: 100vh;
+        padding: 28px;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+    }
+
+    .container {
+        width: min(920px, 96vw);
+        height: min(760px, calc(100vh - 56px));
+        min-height: 560px;
+    }
 }
 
 .shortcuts-info {
-    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    background: linear-gradient(135deg, #22c55e 0%, #10b981 100%);
     color: white;
-    padding: 16px 20px;
-    border-bottom: 1px solid #e9ecef;
+    padding: 16px 22px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 .shortcuts-title {
@@ -61,96 +151,105 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 20px 24px 16px;
-    background-color: white;
-    border-bottom: 1px solid #e9ecef;
+    padding: 12px 14px 10px;
+    background:
+        radial-gradient(900px circle at 0% 0%, rgba(34, 211, 238, 0.14), transparent 58%),
+        linear-gradient(180deg, rgba(17, 28, 51, 0.92), rgba(15, 23, 42, 0.92));
+    border-bottom: 1px solid var(--border-2);
     position: sticky;
     top: 0;
     z-index: 10;
 }
 
 .header h1 {
-    font-size: 18px;
-    font-weight: 600;
-    color: #202124;
+    font-size: 16px;
+    font-weight: 650;
+    letter-spacing: 0.2px;
+    color: var(--text);
     margin: 0;
     flex: 1;
 }
 
 .sort-info {
-    margin: 0 16px;
+    margin: 0 10px;
 }
 
 .sort-info span {
-    font-size: 12px;
-    color: #1976d2;
-    background-color: #e3f2fd;
+    font-size: 11px;
+    color: var(--muted);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-2);
     padding: 4px 8px;
-    border-radius: 12px;
-    font-weight: 500;
+    border-radius: 999px;
+    font-weight: 600;
     cursor: help;
     white-space: nowrap;
 }
 
 .header-actions {
     display: flex;
-    gap: 8px;
+    gap: 6px;
 }
 
 .header-actions .btn {
-    font-size: 12px;
-    padding: 6px 12px;
+    font-size: 11px;
+    padding: 5px 8px;
     white-space: nowrap;
 }
 
 .search-container {
-    padding: 16px 20px;
-    background: #f8f9fa;
-    border-bottom: 1px solid #e9ecef;
+    padding: 10px 12px;
+    background: linear-gradient(180deg, rgba(17, 28, 51, 0.70), rgba(17, 28, 51, 0.55));
+    border-bottom: 1px solid var(--border-2);
 }
 
 .search-input-group {
     display: flex;
     gap: 8px;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
 }
 
 .search-input {
     flex: 1;
-    padding: 12px 16px;
-    border: 2px solid #e9ecef;
-    border-radius: 8px;
-    font-size: 14px;
-    transition: border-color 0.3s ease;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    font-size: 13px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .search-input:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: rgba(34, 211, 238, 0.55);
+    box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.20);
 }
 
 .btn-regex {
-    padding: 12px 16px;
-    background-color: #f1f3f4;
-    color: #5f6368;
-    border: 2px solid #e9ecef;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 650;
     cursor: pointer;
     transition: all 0.2s ease;
     min-width: 50px;
 }
 
 .btn-regex:hover {
-    background-color: #e8eaed;
-    border-color: #667eea;
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(34, 211, 238, 0.35);
 }
 
 .btn-regex.active {
-    background-color: #667eea;
+    background-color: var(--accent);
     color: white;
-    border-color: #667eea;
+    border-color: var(--accent);
+    box-shadow: 0 12px 28px rgba(34, 211, 238, 0.22);
 }
 
 .search-options {
@@ -163,20 +262,20 @@ body {
     align-items: center;
     gap: 8px;
     font-size: 12px;
-    color: #5f6368;
+    color: var(--muted);
     cursor: pointer;
 }
 
 .checkbox-label input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    accent-color: #667eea;
+    width: 15px;
+    height: 15px;
+    accent-color: var(--accent);
 }
 
 .tabs-container {
     flex: 1 1 auto;
     overflow-y: auto;
-    padding-bottom: 16px;
+    padding: 8px 10px 10px;
     max-height: none;
 }
 
@@ -184,35 +283,83 @@ body {
     padding: 0;
 }
 
+/* 两列布局：仅在 JS 判断需要时启用（内容溢出 + 宽度足够） */
+.tabs-container.two-column .tabs-list {
+    display: grid;
+    /* 宽度够时自动两列，不够会自然退回一列 */
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 8px;
+    align-content: start;
+}
+
+.tabs-container.two-column .tab-item {
+    margin: 0;
+}
+
 .tab-item {
     display: flex;
     align-items: center;
-    padding: 12px 20px;
-    border-bottom: 1px solid #f1f3f4;
+    position: relative;
+    padding: 8px 10px;
+    margin: 5px 2px;
+    border: 1px solid var(--border-2);
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 12px;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
     cursor: pointer;
-    transition: background-color 0.2s ease;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.tab-item::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: 8px;
+    right: 54px; /* 避开右侧的 #index 徽标 */
+    padding: 4px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    background: rgba(15, 23, 42, 0.92);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    box-shadow: var(--shadow-sm);
+    opacity: 0;
+    transform: translateY(-2px);
+    transition: opacity 0.12s ease, transform 0.12s ease;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 5;
+    backdrop-filter: blur(10px);
+}
+
+.tab-item:hover::after {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 .tab-item:hover {
-    background-color: #f8f9fa;
+    border-color: rgba(255, 255, 255, 0.16);
+    box-shadow: var(--shadow-sm);
+    transform: translateY(-1px);
 }
 
 .tab-item.selected {
-    background-color: #e3f2fd;
-    border-left: 4px solid #667eea;
+    background: var(--accent-weak);
+    border-color: rgba(34, 211, 238, 0.28);
+    box-shadow: 0 14px 30px rgba(34, 211, 238, 0.12);
 }
 
 .tab-checkbox {
-    margin-right: 12px;
-    width: 18px;
-    height: 18px;
-    accent-color: #667eea;
+    margin-right: 8px;
+    width: 15px;
+    height: 15px;
+    accent-color: var(--accent);
 }
 
 .tab-favicon {
-    width: 16px;
-    height: 16px;
-    margin-right: 12px;
+    width: 14px;
+    height: 14px;
+    margin-right: 8px;
     border-radius: 2px;
 }
 
@@ -225,13 +372,13 @@ body {
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
 .tab-title {
-    font-size: 14px;
-    font-weight: 500;
-    color: #202124;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -241,7 +388,7 @@ body {
 
 .active-indicator {
     font-size: 12px;
-    color: #1976d2;
+    color: var(--accent);
     animation: pulse 1.5s ease-in-out infinite;
 }
 
@@ -252,45 +399,50 @@ body {
 
 .tab-position {
     font-size: 10px;
-    color: #9aa0a6;
-    background-color: #f1f3f4;
-    padding: 2px 6px;
+    color: var(--muted-2);
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-2);
+    padding: 1px 6px;
     border-radius: 10px;
     font-weight: 500;
     white-space: nowrap;
+    font-family: var(--mono);
 }
 
 .tab-item.active-tab {
-    background-color: #e8f0fe;
-    border-left: 4px solid #1976d2;
+    background: rgba(34, 211, 238, 0.10);
+    border-color: rgba(34, 211, 238, 0.22);
 }
 
 .tab-item.active-tab:hover {
-    background-color: #e8f0fe;
+    background: rgba(34, 211, 238, 0.10);
 }
 
 .tab-item.active-tab .tab-position {
-    background-color: #1976d2;
+    background-color: var(--accent);
     color: white;
+    border-color: rgba(255, 255, 255, 0.25);
 }
 
 .tab-item.right-tab .tab-position {
-    background-color: #e8f5e8;
-    color: #2e7d32;
+    background-color: rgba(16, 185, 129, 0.12);
+    color: rgba(134, 239, 172, 0.95);
+    border-color: rgba(16, 185, 129, 0.22);
 }
 
 .tab-url {
     font-size: 12px;
-    color: #5f6368;
+    color: var(--muted);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-family: var(--mono);
 }
 
 .footer {
-    padding: 16px 20px;
-    background: #f8f9fa;
-    border-top: 1px solid #e9ecef;
+    padding: 10px 12px;
+    background: linear-gradient(180deg, rgba(17, 28, 51, 0.62), rgba(17, 28, 51, 0.52));
+    border-top: 1px solid var(--border-2);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -300,7 +452,7 @@ body {
     display: flex;
     gap: 16px;
     font-size: 12px;
-    color: #5f6368;
+    color: var(--muted);
 }
 
 .actions {
@@ -309,11 +461,11 @@ body {
 }
 
 .btn {
-    padding: 8px 16px;
-    border: none;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 500;
+    padding: 6px 10px;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 650;
     cursor: pointer;
     transition: all 0.2s ease;
 }
@@ -324,27 +476,30 @@ body {
 }
 
 .btn-secondary {
-    background-color: #f1f3f4;
-    color: #5f6368;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--muted);
+    border-color: var(--border);
 }
 
 .btn-secondary:hover:not(:disabled) {
-    background-color: #e8eaed;
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(34, 211, 238, 0.28);
 }
 
 .btn-danger {
-    background-color: #dc3545;
+    background-color: var(--danger);
     color: white;
+    border-color: rgba(0, 0, 0, 0.08);
 }
 
 .btn-danger:hover:not(:disabled) {
-    background-color: #c82333;
+    background-color: #e11d48;
 }
 
 .empty-state {
     text-align: center;
     padding: 40px 20px;
-    color: #5f6368;
+    color: var(--muted);
 }
 
 .empty-state-icon {
@@ -356,12 +511,12 @@ body {
 .loading {
     text-align: center;
     padding: 40px 20px;
-    color: #5f6368;
+    color: var(--muted);
 }
 
 .spinner {
-    border: 3px solid #f3f3f3;
-    border-top: 3px solid #667eea;
+    border: 3px solid rgba(255, 255, 255, 0.10);
+    border-top: 3px solid var(--accent);
     border-radius: 50%;
     width: 24px;
     height: 24px;
@@ -376,27 +531,27 @@ body {
 
 /* 滚动条样式 */
 .tabs-container::-webkit-scrollbar {
-    width: 6px;
+    width: 8px;
 }
 
 .tabs-container::-webkit-scrollbar-track {
-    background: #f1f1f1;
+    background: transparent;
 }
 
 .tabs-container::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
 }
 
 .tabs-container::-webkit-scrollbar-thumb:hover {
-    background: #a8a8a8;
+    background: rgba(255, 255, 255, 0.18);
 }
 
 .keyword-suggestions {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
     background: none;
     border: none;
     min-height: 0;
@@ -404,16 +559,16 @@ body {
 }
 
 .keyword-btn {
-    background: #f1f3f4;
-    color: #333;
-    border: 1.5px solid #e0e3e8;
-    border-radius: 8px;
-    padding: 4px 10px;
-    font-size: 13px;
-    font-weight: 500;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 650;
     cursor: pointer;
     transition: all 0.2s ease;
-    box-shadow: 0 1px 2px rgba(100,100,100,0.04);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
     outline: none;
     display: flex;
     align-items: center;
@@ -423,14 +578,14 @@ body {
 
 .keyword-btn:hover {
     transform: translateY(-1px);
-    box-shadow: 0 3px 8px rgba(0,0,0,0.12);
+    box-shadow: var(--shadow-sm);
 }
 
 .keyword-btn.active {
-    background: #667eea;
+    background: var(--accent);
     color: #fff;
-    border-color: #667eea;
-    box-shadow: 0 2px 8px rgba(102,126,234,0.3);
+    border-color: rgba(0, 0, 0, 0.06);
+    box-shadow: 0 14px 30px rgba(34, 211, 238, 0.18);
 }
 
 .keyword-icon {
@@ -446,22 +601,23 @@ body {
     font-size: 11px;
     opacity: 0.8;
     font-weight: normal;
+    font-family: var(--mono);
 }
 
 /* 域名关键词特殊样式 */
 .domain-keyword {
-    border-left: 3px solid #1976d2;
+    border-left: 3px solid var(--accent);
 }
 
 .domain-keyword:hover {
-    border-color: #1976d2;
+    border-color: var(--accent);
 }
 
 /* 标题关键词特殊样式 */
 .title-keyword {
-    border-left: 3px solid #2e7d32;
+    border-left: 3px solid var(--success);
 }
 
 .title-keyword:hover {
-    border-color: #2e7d32;
+    border-color: var(--success);
 } 

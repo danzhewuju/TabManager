@@ -2,6 +2,8 @@ const TOP_KEYWORDS_COUNT = 5; // 可根据需要修改显示数量
 
 class TabManager {
     constructor() {
+        this.isStandalone = new URLSearchParams(window.location.search).get('standalone') === '1';
+        this.isPanel = new URLSearchParams(window.location.search).get('panel') === '1';
         this.tabs = [];
         this.selectedTabs = new Set();
         this.filteredTabs = [];
@@ -9,6 +11,17 @@ class TabManager {
         this.isCaseSensitive = false;
         this.keywordCache = null; // 关键词缓存
         this.lastTabsHash = null; // 标签页数据哈希，用于判断是否需要重新计算
+        this._layoutRaf = null;
+
+        if (this.isStandalone) {
+            document.documentElement.classList.add('standalone');
+            document.body.classList.add('standalone');
+        }
+        if (this.isPanel) {
+            document.documentElement.classList.add('panel');
+            document.body.classList.add('panel');
+        }
+
         this.init();
     }
 
@@ -22,6 +35,26 @@ class TabManager {
     }
 
     bindEvents() {
+        // 侧边栏打开（侧边栏里跳转不会关闭）
+        const openSidePanelBtn = document.getElementById('openSidePanel');
+        if (openSidePanelBtn) {
+            openSidePanelBtn.addEventListener('click', async () => {
+                try {
+                    // Side Panel API 不可用时，自动降级为“常驻窗口版”
+                    if (!chrome.sidePanel || typeof chrome.sidePanel.open !== 'function') {
+                        await this.openStandaloneWindow();
+                        this.showSuccess('侧边栏不可用：已打开常驻窗口');
+                        return;
+                    }
+
+                    await this.openSidePanel();
+                    this.showSuccess('已在侧边栏打开');
+                } catch (e) {
+                    this.showError(`打开侧边栏失败：${String(e && e.message ? e.message : e)}`);
+                }
+            });
+        }
+
         // 全选按钮
         document.getElementById('selectAll').addEventListener('click', () => {
             this.selectAllTabs();
@@ -70,6 +103,45 @@ class TabManager {
             }
             this.syncSelectAllCheckbox();
         });
+
+        // 视口变化时重新评估是否需要两列（主要用于独立标签页模式）
+        window.addEventListener('resize', () => {
+            this.scheduleLayoutUpdate();
+        });
+    }
+
+    // 说明：Chrome 扩展 popup 在切换焦点（激活标签页/窗口）时会自动关闭，无法阻止。
+    // 如果未来需要“常驻窗口版”，可以再恢复独立窗口逻辑。
+
+    scheduleLayoutUpdate() {
+        if (this._layoutRaf) cancelAnimationFrame(this._layoutRaf);
+        this._layoutRaf = requestAnimationFrame(() => {
+            this._layoutRaf = null;
+            this.updateTwoColumnLayout();
+        });
+    }
+
+    updateTwoColumnLayout() {
+        const tabsContainer = document.querySelector('.tabs-container');
+        const tabsList = document.getElementById('tabsList');
+        if (!tabsContainer || !tabsList) return;
+
+        // 规则：如果“单列布局”会溢出（需要滚动），则启用两列。
+        // 注意：两列会改变 scrollHeight，因此必须以“单列”作为判断基准，避免抖动。
+        const hadTwoColumn = tabsContainer.classList.contains('two-column');
+        tabsContainer.classList.remove('two-column');
+
+        const overflowInSingleColumn = tabsContainer.scrollHeight > tabsContainer.clientHeight + 8;
+
+        if (overflowInSingleColumn) {
+            tabsContainer.classList.add('two-column');
+        } else {
+            tabsContainer.classList.remove('two-column');
+        }
+
+        // 如果之前是两列，但单列不溢出，则保持移除即可（上面已处理）。
+        // hadTwoColumn 仅用于表达意图，防止未来改逻辑时误用。
+        void hadTwoColumn;
     }
 
     showKeyboardShortcuts() {
@@ -173,17 +245,66 @@ class TabManager {
     }
 
     sendMessage(message) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             chrome.runtime.sendMessage(message, (response) => {
+                const err = chrome.runtime.lastError;
+                if (err) return reject(err);
                 resolve(response);
             });
         });
     }
 
+    async openSidePanel() {
+        if (!chrome.sidePanel || typeof chrome.sidePanel.open !== 'function') {
+            throw new Error('Side Panel API not available（请升级 Chrome）');
+        }
+
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!activeTab || typeof activeTab.id !== 'number') {
+            throw new Error('No active tab found');
+        }
+
+        // 先设置 side panel 的内容页（manifest 的 default_path 在部分版本/场景下不会立即生效）
+        await new Promise((resolve, reject) => {
+            chrome.sidePanel.setOptions(
+                { tabId: activeTab.id, path: 'popup.html?panel=1', enabled: true },
+                () => {
+                    const err = chrome.runtime.lastError;
+                    if (err) return reject(err);
+                    resolve();
+                }
+            );
+        });
+
+        await new Promise((resolve, reject) => {
+            chrome.sidePanel.open({ tabId: activeTab.id }, () => {
+                const err = chrome.runtime.lastError;
+                if (err) return reject(err);
+                resolve();
+            });
+        });
+    }
+
+    async openStandaloneWindow() {
+        const url = chrome.runtime.getURL('popup.html?standalone=1');
+        await new Promise((resolve, reject) => {
+            chrome.windows.create(
+                { url, type: 'popup', width: 560, height: 720, focused: true },
+                () => {
+                    const err = chrome.runtime.lastError;
+                    if (err) return reject(err);
+                    resolve();
+                }
+            );
+        });
+    }
+
     renderTabs() {
         const tabsList = document.getElementById('tabsList');
+        const tabsContainer = document.querySelector('.tabs-container');
         
         if (this.filteredTabs.length === 0) {
+            if (tabsContainer) tabsContainer.classList.remove('two-column');
             tabsList.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-state-icon">📄</div>
@@ -221,6 +342,10 @@ class TabManager {
         });
         this.syncSelectAllCheckbox();
         this.renderKeywordSuggestions();
+        // 同步决定首帧布局，避免“先单列后双列”的闪动
+        this.updateTwoColumnLayout();
+        // 兜底：favicon/字体等晚到的布局变化，再补一次
+        setTimeout(() => this.updateTwoColumnLayout(), 200);
     }
 
     createTabElement(tab) {
@@ -237,7 +362,7 @@ class TabManager {
         const positionClass = tab.active ? 'active-tab' : (isRightSideTab ? 'right-tab' : '');
         
         return `
-            <div class="tab-item ${isSelected ? 'selected' : ''} ${positionClass}" data-tab-id="${tab.id}">
+            <div class="tab-item ${isSelected ? 'selected' : ''} ${positionClass}" data-tab-id="${tab.id}" data-tooltip="点击跳转">
                 <input type="checkbox" 
                        id="tab-${tab.id}" 
                        class="tab-checkbox" 
