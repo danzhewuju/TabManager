@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tab Manager",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "快速管理和删除浏览器标签页的工具",
   "permissions": [
     "tabs",

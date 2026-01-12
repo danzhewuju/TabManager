@@ -339,8 +339,9 @@ body.panel .container {
 .tab-item::after {
     content: attr(data-tooltip);
     position: absolute;
-    top: 8px;
-    right: 54px; /* 避开右侧的 #index 徽标 */
+    /* 避免遮挡左侧复选框：放到右下角 */
+    bottom: 16px;
+    right: 10px;
     padding: 4px 8px;
     font-size: 12px;
     font-weight: 600;
@@ -350,9 +351,9 @@ body.panel .container {
     border-radius: 999px;
     box-shadow: var(--shadow-sm);
     opacity: 0;
-    transform: translateY(-2px);
+    transform: translateY(2px);
     transition: opacity 0.12s ease, transform 0.12s ease;
-    pointer-events: none;
+    pointer-events: none; /* 不拦截勾选/点击 */
     white-space: nowrap;
     z-index: 5;
     backdrop-filter: blur(10px);
