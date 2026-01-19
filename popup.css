@@ -239,6 +239,7 @@ body.panel .container {
 .search-options {
     display: flex;
     align-items: center;
+    gap: 8px;
 }
 
 .checkbox-label {
@@ -251,9 +252,84 @@ body.panel .container {
 }
 
 .checkbox-label input[type="checkbox"] {
-    width: 15px;
-    height: 15px;
-    accent-color: var(--accent);
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    border-radius: 4px; /* 小方框 */
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+    position: relative;
+    display: inline-block;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.checkbox-label:hover input[type="checkbox"] {
+    border-color: rgba(34, 211, 238, 0.28);
+}
+
+.checkbox-label input[type="checkbox"]:focus-visible {
+    outline: none;
+    border-color: rgba(34, 211, 238, 0.55);
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.20);
+}
+
+.checkbox-label input[type="checkbox"]:checked {
+    background: var(--accent);
+    border-color: rgba(0, 0, 0, 0.10);
+}
+
+.checkbox-label input[type="checkbox"]:checked::after {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 4px;
+    height: 8px;
+    border: 2px solid #fff;
+    border-top: 0;
+    border-left: 0;
+    transform: rotate(45deg);
+}
+
+/* “全选/反选”同款：小方框 + 文本的轻量动作按钮 */
+.mini-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.mini-action::before {
+    content: "";
+    width: 14px;
+    height: 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.mini-action:hover::before {
+    border-color: rgba(34, 211, 238, 0.28);
+}
+
+.mini-action:focus-visible {
+    outline: none;
+}
+
+.mini-action:focus-visible::before {
+    border-color: rgba(34, 211, 238, 0.55);
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.20);
 }
 
 .tabs-container {
@@ -376,6 +452,40 @@ body.panel .container {
     box-shadow: 0 14px 30px rgba(34, 211, 238, 0.12);
 }
 
+.tab-item.is-current {
+    border-color: rgba(34, 211, 238, 0.55);
+    background: rgba(34, 211, 238, 0.06);
+    box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.18) inset, var(--shadow-sm);
+}
+
+.tab-item.is-current::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 10px;
+    bottom: 10px;
+    width: 3px;
+    border-radius: 999px;
+    background: var(--accent);
+    opacity: 0.9;
+}
+
+.tab-item.selected.is-current {
+    box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.22) inset, 0 18px 40px rgba(34, 211, 238, 0.14);
+}
+
+.tab-current-badge {
+    font-size: 10px;
+    font-weight: 750;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: rgba(34, 211, 238, 0.18);
+    border: 1px solid rgba(34, 211, 238, 0.35);
+    color: var(--text);
+    white-space: nowrap;
+    backdrop-filter: blur(10px);
+}
+
 .tab-checkbox {
     margin-right: 8px;
     width: 15px;
@@ -463,6 +573,9 @@ body.panel .container {
     font-weight: 650;
     cursor: pointer;
     transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .btn:disabled {

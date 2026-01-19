@@ -16,6 +16,9 @@ class TabManager {
         this._tabsRefreshInFlight = false;
         this._tabsRefreshQueued = false;
         this._suppressClickUntil = 0;
+        this.currentTabId = null; // 当前激活的 tab id（用于高亮定位）
+        this.currentWindowId = null; // 当前激活 tab 所在 window id
+        this._scrolledToCurrentOnce = false;
         this._drag = {
             pressTimer: null,
             active: false,
@@ -99,6 +102,14 @@ class TabManager {
         document.getElementById('selectNone').addEventListener('click', () => {
             this.clearSelection();
         });
+
+        // 反选按钮（对当前筛选结果逐个取反）
+        const invertSelectionBtn = document.getElementById('invertSelection');
+        if (invertSelectionBtn) {
+            invertSelectionBtn.addEventListener('click', () => {
+                this.invertSelection();
+            });
+        }
 
         // 删除选中按钮
         document.getElementById('deleteSelected').addEventListener('click', () => {
@@ -328,6 +339,9 @@ class TabManager {
                 this.tabs = (tabs || []).map(normalizeTab);
                 this.filteredTabs = [...this.tabs];
             }
+
+            // 同步当前激活 tab（用于列表高亮/标识）
+            await this.updateCurrentActiveTab();
             
             // 清除关键词缓存，强制重新计算
             this.keywordCache = null;
@@ -348,6 +362,26 @@ class TabManager {
                 resolve(response);
             });
         });
+    }
+
+    async updateCurrentActiveTab() {
+        try {
+            if (!chrome || !chrome.tabs || typeof chrome.tabs.query !== 'function') return;
+
+            // 优先取“最近聚焦窗口”的激活 tab（比 currentWindow 更贴近真实用户视角）
+            let activeTabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+            if (!activeTabs || activeTabs.length === 0) {
+                activeTabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            }
+
+            const t = activeTabs && activeTabs[0];
+            this.currentTabId = (t && typeof t.id === 'number') ? t.id : null;
+            this.currentWindowId = (t && typeof t.windowId === 'number') ? t.windowId : null;
+        } catch (e) {
+            // 不阻断主流程：失败就不高亮
+            this.currentTabId = null;
+            this.currentWindowId = null;
+        }
     }
 
     async openSidePanel() {
@@ -446,10 +480,16 @@ class TabManager {
         this.updateTwoColumnLayout();
         // 兜底：favicon/字体等晚到的布局变化，再补一次
         setTimeout(() => this.updateTwoColumnLayout(), 200);
+
+        // 在侧边栏/常驻窗口里，首帧自动把“当前 tab”滚到可见区域（便于快速定位）
+        this.maybeScrollToCurrentTab();
     }
 
     createTabElement(tab) {
         const isSelected = this.selectedTabs.has(tab.id);
+        const isCurrent = (typeof this.currentTabId === 'number')
+            && tab.id === this.currentTabId
+            && (this.currentWindowId == null || tab.windowId === this.currentWindowId);
         const favicon = tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23ccc"/></svg>';
         
         // 获取该窗口的标签页总数，计算位置提示
@@ -461,7 +501,7 @@ class TabManager {
             : (tab.url && String(tab.url).trim().length > 0 ? tab.url : '(空白标签页)');
 
         return `
-            <div class="tab-item ${isSelected ? 'selected' : ''}" data-tab-id="${tab.id}" data-window-id="${tab.windowId}" data-tooltip="点击跳转（长按可拖动排序）">
+            <div class="tab-item ${isSelected ? 'selected' : ''} ${isCurrent ? 'is-current' : ''}" data-tab-id="${tab.id}" data-window-id="${tab.windowId}" data-tooltip="点击跳转（长按可拖动排序）">
                 <input type="checkbox" 
                        id="tab-${tab.id}" 
                        class="tab-checkbox" 
@@ -470,12 +510,34 @@ class TabManager {
                 <div class="tab-content">
                     <div class="tab-title-row">
                         <span class="tab-title" title="${this.escapeHtml(safeTitle)}">${this.escapeHtml(safeTitle)}</span>
+                        ${isCurrent ? '<span class="tab-current-badge" title="当前标签页">当前</span>' : ''}
                         <span class="tab-position" title="标签页位置: ${tab.index + 1}/${totalTabsInWindow}">#${tab.index + 1}</span>
                     </div>
                     <span class="tab-url" title="${this.escapeHtml(tab.url || '')}">${this.escapeHtml(this.getDomain(tab.url))}</span>
                 </div>
             </div>
         `;
+    }
+
+    maybeScrollToCurrentTab() {
+        if (this._scrolledToCurrentOnce) return;
+        if (!this.isPanel && !this.isStandalone) return;
+
+        const term = String(document.getElementById('searchInput')?.value ?? '').trim();
+        if (term.length > 0) return;
+        if (typeof this.currentTabId !== 'number') return;
+
+        const el = document.querySelector(`.tab-item[data-tab-id="${this.currentTabId}"]`);
+        if (!el) return;
+
+        this._scrolledToCurrentOnce = true;
+        setTimeout(() => {
+            try {
+                el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            } catch {
+                el.scrollIntoView();
+            }
+        }, 50);
     }
 
     bindLongPressDrag(tabItem, tab) {
@@ -798,6 +860,21 @@ class TabManager {
         // 只取消当前筛选结果的选中状态
         this.filteredTabs.forEach(tab => {
             this.selectedTabs.delete(tab.id);
+        });
+        this.renderTabs();
+        this.syncSelectAllCheckbox();
+        this.updateStats();
+        this.updateDeleteButton();
+    }
+
+    invertSelection() {
+        // 只对当前筛选结果反选，不影响未显示的标签页
+        this.filteredTabs.forEach(tab => {
+            if (this.selectedTabs.has(tab.id)) {
+                this.selectedTabs.delete(tab.id);
+            } else {
+                this.selectedTabs.add(tab.id);
+            }
         });
         this.renderTabs();
         this.syncSelectAllCheckbox();
