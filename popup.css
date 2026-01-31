@@ -486,11 +486,33 @@ body.panel .container {
     backdrop-filter: blur(10px);
 }
 
+/* 选择区域：包裹复选框和 favicon，提供更大的点击范围 */
+.tab-select-area {
+    display: flex;
+    align-items: center;
+    padding: 6px 8px 6px 4px;
+    margin: -6px 0 -6px -4px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    flex-shrink: 0;
+}
+
+.tab-select-area:hover {
+    background: rgba(34, 211, 238, 0.12);
+}
+
+.tab-select-area:active {
+    background: rgba(34, 211, 238, 0.20);
+}
+
 .tab-checkbox {
     margin-right: 8px;
     width: 15px;
     height: 15px;
     accent-color: var(--accent);
+    cursor: pointer;
+    flex-shrink: 0;
 }
 
 .tab-favicon {
@@ -498,6 +520,8 @@ body.panel .container {
     height: 14px;
     margin-right: 8px;
     border-radius: 2px;
+    flex-shrink: 0;
+    pointer-events: none;
 }
 
 .tab-content {

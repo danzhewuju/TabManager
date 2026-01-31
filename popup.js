@@ -455,13 +455,31 @@ class TabManager {
                     this.syncSelectAllCheckbox();
                 });
             }
-            // 绑定 tab-item 点击事件（排除复选框）
+            
+            // 绑定选择区域点击事件（复选框 + favicon 区域）
+            const selectArea = document.querySelector(`.tab-select-area[data-tab-id="${tab.id}"]`);
+            if (selectArea) {
+                selectArea.addEventListener('click', (e) => {
+                    if (Date.now() < this._suppressClickUntil) return;
+                    // 如果点击的是复选框本身，让复选框自己处理
+                    if (e.target.classList.contains('tab-checkbox')) return;
+                    // 阻止事件冒泡到 tab-item（避免触发跳转）
+                    e.stopPropagation();
+                    // 切换选中状态
+                    const newState = !this.selectedTabs.has(tab.id);
+                    this.toggleTabSelection(tab.id, newState);
+                    if (checkbox) checkbox.checked = newState;
+                    this.syncSelectAllCheckbox();
+                });
+            }
+            
+            // 绑定 tab-item 点击事件（排除选择区域）
             const tabItem = document.querySelector(`.tab-item[data-tab-id="${tab.id}"]`);
             if (tabItem) {
                 tabItem.addEventListener('click', (e) => {
                     if (Date.now() < this._suppressClickUntil) return;
-                    // 如果点击的是复选框，忽略
-                    if (e.target.classList.contains('tab-checkbox')) return;
+                    // 如果点击的是选择区域（复选框或 favicon），忽略（已在 selectArea 处理）
+                    if (e.target.closest('.tab-select-area')) return;
                     // 激活标签页
                     chrome.tabs.update(tab.id, {active: true});
                     // 激活窗口（如果不在当前窗口）
@@ -502,11 +520,13 @@ class TabManager {
 
         return `
             <div class="tab-item ${isSelected ? 'selected' : ''} ${isCurrent ? 'is-current' : ''}" data-tab-id="${tab.id}" data-window-id="${tab.windowId}" data-tooltip="点击跳转（长按可拖动排序）">
-                <input type="checkbox" 
-                       id="tab-${tab.id}" 
-                       class="tab-checkbox" 
-                       ${isSelected ? 'checked' : ''}>
-                <img src="${favicon}" alt="favicon" class="tab-favicon" onerror="this.style.display='none'">
+                <div class="tab-select-area" data-tab-id="${tab.id}" title="点击选中/取消选中">
+                    <input type="checkbox" 
+                           id="tab-${tab.id}" 
+                           class="tab-checkbox" 
+                           ${isSelected ? 'checked' : ''}>
+                    <img src="${favicon}" alt="favicon" class="tab-favicon" onerror="this.style.display='none'">
+                </div>
                 <div class="tab-content">
                     <div class="tab-title-row">
                         <span class="tab-title" title="${this.escapeHtml(safeTitle)}">${this.escapeHtml(safeTitle)}</span>
