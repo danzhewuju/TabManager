@@ -752,4 +752,418 @@ body.panel .container {
 
 .title-keyword:hover {
     border-color: var(--success);
+}
+
+/* 自定义分组关键词样式 */
+.custom-keyword {
+    border-left: 3px solid #f59e0b;
+}
+
+.custom-keyword:hover {
+    border-color: #f59e0b;
+}
+
+/* ========= 自定义分组设置弹窗 ========= */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: rgba(0, 0, 0, 0.60);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: modalFadeIn 0.2s ease;
+}
+
+@keyframes modalFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal-container {
+    width: min(480px, 92vw);
+    max-height: min(520px, 85vh);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: modalSlideIn 0.25s ease;
+}
+
+@keyframes modalSlideIn {
+    from { transform: translateY(18px) scale(0.97); opacity: 0; }
+    to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border-2);
+    background: linear-gradient(180deg, rgba(17, 28, 51, 0.92), rgba(15, 23, 42, 0.92));
+}
+
+.modal-header h2 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0;
+}
+
+.modal-close {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 18px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    line-height: 1;
+}
+
+.modal-close:hover {
+    background: rgba(244, 63, 94, 0.15);
+    border-color: rgba(244, 63, 94, 0.35);
+    color: var(--danger);
+}
+
+.modal-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 14px 18px;
+}
+
+.modal-description {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 14px;
+    line-height: 1.5;
+}
+
+/* 规则表单 */
+.rule-form {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    margin-bottom: 16px;
+}
+
+.rule-form-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.rule-form-row:last-child {
+    margin-bottom: 0;
+}
+
+.rule-input {
+    flex: 1;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 12px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.rule-input:focus {
+    outline: none;
+    border-color: rgba(34, 211, 238, 0.55);
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15);
+}
+
+.rule-input-wide {
+    flex: 2;
+}
+
+.rule-input::placeholder {
+    color: var(--muted);
+    opacity: 0.6;
+}
+
+.rule-select {
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 12px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+}
+
+.rule-select:focus {
+    outline: none;
+    border-color: rgba(34, 211, 238, 0.55);
+}
+
+.rule-target-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--muted);
+    flex: 1;
+}
+
+.btn-accent {
+    background: var(--accent);
+    color: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 10px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 650;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.btn-accent:hover {
+    background: #06b6d4;
+    box-shadow: 0 8px 20px rgba(34, 211, 238, 0.25);
+}
+
+.rule-error {
+    font-size: 12px;
+    color: var(--danger);
+    margin-top: 6px;
+    padding: 6px 10px;
+    background: rgba(244, 63, 94, 0.08);
+    border: 1px solid rgba(244, 63, 94, 0.20);
+    border-radius: 8px;
+}
+
+/* 规则列表 */
+.rules-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 12px;
+    font-weight: 650;
+    color: var(--muted);
+}
+
+.rules-hint {
+    font-weight: 400;
+    font-size: 11px;
+    opacity: 0.6;
+}
+
+.rules-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: rgba(245, 158, 11, 0.18);
+    color: #f59e0b;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--mono);
+}
+
+.rules-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.rules-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.rules-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.rules-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.10);
+    border-radius: 999px;
+}
+
+.rules-empty {
+    text-align: center;
+    padding: 24px 16px;
+    font-size: 12px;
+    color: var(--muted);
+    opacity: 0.6;
+}
+
+.rule-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-2);
+    border-radius: 10px;
+    transition: border-color 0.15s ease;
+}
+
+.rule-item:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+}
+
+.rule-item-color {
+    width: 6px;
+    height: 28px;
+    border-radius: 999px;
+    flex-shrink: 0;
+}
+
+.rule-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.rule-item-name {
+    font-size: 13px;
+    font-weight: 650;
+    color: var(--text);
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rule-item-pattern {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--mono);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rule-item-target {
+    font-size: 10px;
+    color: var(--muted-2);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-2);
+    border-radius: 6px;
+    padding: 2px 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.rule-item-drag-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    font-size: 14px;
+    color: var(--muted);
+    cursor: grab;
+    opacity: 0.5;
+    flex-shrink: 0;
+    transition: opacity 0.15s ease, color 0.15s ease;
+    user-select: none;
+}
+
+.rule-item-drag-handle:hover {
+    opacity: 1;
+    color: var(--accent);
+}
+
+.rule-item:active .rule-item-drag-handle {
+    cursor: grabbing;
+}
+
+.rule-item-priority {
+    font-size: 10px;
+    font-family: var(--mono);
+    font-weight: 700;
+    color: var(--muted-2);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-2);
+    border-radius: 6px;
+    padding: 1px 5px;
+    margin-right: 4px;
+    white-space: nowrap;
+}
+
+.rule-item-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.rule-move-btn {
+    width: 22px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-2);
+    border-radius: 4px;
+    color: var(--muted);
+    font-size: 9px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+    line-height: 1;
+}
+
+.rule-move-btn:hover:not(:disabled) {
+    background: rgba(34, 211, 238, 0.12);
+    border-color: rgba(34, 211, 238, 0.35);
+    color: var(--accent);
+}
+
+.rule-move-btn:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+}
+
+.rule-item.rule-dragging {
+    opacity: 0.35;
+}
+
+.rule-item.rule-drag-over {
+    border-color: var(--accent);
+    background: rgba(34, 211, 238, 0.08);
+}
+
+.rule-item-delete {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--muted);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.rule-item-delete:hover {
+    background: rgba(244, 63, 94, 0.12);
+    border-color: rgba(244, 63, 94, 0.28);
+    color: var(--danger);
 } 

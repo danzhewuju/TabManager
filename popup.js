@@ -9,6 +9,7 @@ class TabManager {
         this.filteredTabs = [];
         this.isRegexMode = false;
         this.isCaseSensitive = false;
+        this.customGroups = []; // 自定义分组规则
         this.keywordCache = null; // 关键词缓存
         this.lastTabsHash = null; // 标签页数据哈希，用于判断是否需要重新计算
         this._layoutRaf = null;
@@ -53,6 +54,7 @@ class TabManager {
     async init() {
         this.bindEvents();
         this.enableLiveTabRefresh();
+        await this.loadCustomGroups();
         await this.loadTabs();
         this.renderTabs();
         this.updateStats();
@@ -93,15 +95,79 @@ class TabManager {
             });
         }
 
+        // 自定义分组设置按钮
+        const openGroupSettingsBtn = document.getElementById('openGroupSettings');
+        if (openGroupSettingsBtn) {
+            openGroupSettingsBtn.addEventListener('click', () => {
+                this.openGroupSettingsModal();
+            });
+        }
+
+        // 弹窗关闭按钮
+        const closeModalBtn = document.getElementById('closeModal');
+        if (closeModalBtn) {
+            closeModalBtn.addEventListener('click', () => {
+                this.closeGroupSettingsModal();
+            });
+        }
+
+        // 弹窗遮罩点击关闭
+        const modalOverlay = document.getElementById('groupSettingsModal');
+        if (modalOverlay) {
+            modalOverlay.addEventListener('click', (e) => {
+                if (e.target === modalOverlay) {
+                    this.closeGroupSettingsModal();
+                }
+            });
+        }
+
+        // 添加规则按钮
+        const addRuleBtn = document.getElementById('addRuleBtn');
+        if (addRuleBtn) {
+            addRuleBtn.addEventListener('click', () => {
+                this.addCustomGroupRule();
+            });
+        }
+
+        // 规则输入框回车提交
+        const rulePatternInput = document.getElementById('rulePatternInput');
+        if (rulePatternInput) {
+            rulePatternInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.addCustomGroupRule();
+                }
+            });
+        }
+
+        const ruleNameInput = document.getElementById('ruleNameInput');
+        if (ruleNameInput) {
+            ruleNameInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    // 如果名称已填，焦点跳到正则输入框
+                    if (ruleNameInput.value.trim()) {
+                        rulePatternInput?.focus();
+                    }
+                }
+            });
+        }
+
         // 全选按钮
-        document.getElementById('selectAll').addEventListener('click', () => {
-            this.selectAllTabs();
-        });
+        const selectAllBtn = document.getElementById('selectAll');
+        if (selectAllBtn) {
+            selectAllBtn.addEventListener('click', () => {
+                this.selectAllTabs();
+            });
+        }
 
         // 取消全选按钮
-        document.getElementById('selectNone').addEventListener('click', () => {
-            this.clearSelection();
-        });
+        const selectNoneBtn = document.getElementById('selectNone');
+        if (selectNoneBtn) {
+            selectNoneBtn.addEventListener('click', () => {
+                this.clearSelection();
+            });
+        }
 
         // 反选按钮（对当前筛选结果逐个取反）
         const invertSelectionBtn = document.getElementById('invertSelection');
@@ -1122,19 +1188,282 @@ class TabManager {
         selectAllCheckbox.checked = allSelected;
     }
 
+    // ========= 自定义分组规则管理 =========
+
+    // 预定义颜色列表（用于自动分配颜色）
+    static GROUP_COLORS = [
+        '#f59e0b', '#8b5cf6', '#ec4899', '#10b981', '#ef4444',
+        '#3b82f6', '#14b8a6', '#f97316', '#6366f1', '#84cc16',
+    ];
+
+    async loadCustomGroups() {
+        try {
+            const result = await chrome.storage.sync.get('customGroups');
+            this.customGroups = Array.isArray(result.customGroups) ? result.customGroups : [];
+        } catch (e) {
+            console.warn('加载自定义分组规则失败:', e);
+            this.customGroups = [];
+        }
+    }
+
+    async saveCustomGroups() {
+        try {
+            await chrome.storage.sync.set({ customGroups: this.customGroups });
+            // 清除关键词缓存，触发重新计算
+            this.keywordCache = null;
+            this.lastTabsHash = null;
+        } catch (e) {
+            console.error('保存自定义分组规则失败:', e);
+            this.showError('保存分组规则失败');
+        }
+    }
+
+    openGroupSettingsModal() {
+        const modal = document.getElementById('groupSettingsModal');
+        if (modal) {
+            modal.style.display = 'flex';
+            this.renderRulesList();
+            // 聚焦到名称输入框
+            setTimeout(() => {
+                document.getElementById('ruleNameInput')?.focus();
+            }, 100);
+        }
+    }
+
+    closeGroupSettingsModal() {
+        const modal = document.getElementById('groupSettingsModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+        // 清空输入
+        const nameInput = document.getElementById('ruleNameInput');
+        const patternInput = document.getElementById('rulePatternInput');
+        const errorDiv = document.getElementById('ruleError');
+        if (nameInput) nameInput.value = '';
+        if (patternInput) patternInput.value = '';
+        if (errorDiv) errorDiv.style.display = 'none';
+        // 关闭弹窗后刷新关键词
+        this.keywordCache = null;
+        this.lastTabsHash = null;
+        this.renderKeywordSuggestions();
+    }
+
+    addCustomGroupRule() {
+        const nameInput = document.getElementById('ruleNameInput');
+        const patternInput = document.getElementById('rulePatternInput');
+        const targetSelect = document.getElementById('ruleTargetSelect');
+        const errorDiv = document.getElementById('ruleError');
+
+        const name = (nameInput?.value ?? '').trim();
+        const pattern = (patternInput?.value ?? '').trim();
+        const target = targetSelect?.value ?? 'url';
+
+        // 验证
+        if (!name) {
+            this.showRuleError('请输入分组名称');
+            nameInput?.focus();
+            return;
+        }
+        if (!pattern) {
+            this.showRuleError('请输入正则表达式');
+            patternInput?.focus();
+            return;
+        }
+
+        // 验证正则表达式有效性
+        try {
+            new RegExp(pattern, 'i');
+        } catch (e) {
+            this.showRuleError(`正则表达式无效: ${e.message}`);
+            patternInput?.focus();
+            return;
+        }
+
+        // 检查名称是否重复
+        if (this.customGroups.some(g => g.name === name)) {
+            this.showRuleError('分组名称已存在，请使用不同的名称');
+            nameInput?.focus();
+            return;
+        }
+
+        // 自动分配颜色
+        const usedColors = new Set(this.customGroups.map(g => g.color));
+        const availableColor = TabManager.GROUP_COLORS.find(c => !usedColors.has(c))
+            || TabManager.GROUP_COLORS[this.customGroups.length % TabManager.GROUP_COLORS.length];
+
+        const rule = {
+            id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+            name,
+            pattern,
+            target,
+            color: availableColor,
+        };
+
+        this.customGroups.push(rule);
+        this.saveCustomGroups();
+
+        // 清空输入
+        if (nameInput) nameInput.value = '';
+        if (patternInput) patternInput.value = '';
+        if (errorDiv) errorDiv.style.display = 'none';
+
+        this.renderRulesList();
+        nameInput?.focus();
+        this.showSuccess(`已添加分组规则: ${name}`);
+    }
+
+    deleteCustomGroupRule(ruleId) {
+        const rule = this.customGroups.find(g => g.id === ruleId);
+        if (!rule) return;
+
+        this.customGroups = this.customGroups.filter(g => g.id !== ruleId);
+        this.saveCustomGroups();
+        this.renderRulesList();
+        this.showSuccess(`已删除分组规则: ${rule.name}`);
+    }
+
+    showRuleError(message) {
+        const errorDiv = document.getElementById('ruleError');
+        if (errorDiv) {
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+    }
+
+    moveCustomGroupRule(ruleId, direction) {
+        const idx = this.customGroups.findIndex(g => g.id === ruleId);
+        if (idx < 0) return;
+        const targetIdx = idx + direction;
+        if (targetIdx < 0 || targetIdx >= this.customGroups.length) return;
+        // 交换
+        [this.customGroups[idx], this.customGroups[targetIdx]] = [this.customGroups[targetIdx], this.customGroups[idx]];
+        this.saveCustomGroups();
+        this.renderRulesList();
+    }
+
+    renderRulesList() {
+        const listContainer = document.getElementById('rulesList');
+        const countSpan = document.getElementById('rulesCount');
+        if (!listContainer) return;
+
+        if (countSpan) countSpan.textContent = String(this.customGroups.length);
+
+        if (this.customGroups.length === 0) {
+            listContainer.innerHTML = '<div class="rules-empty">暂无自定义分组规则</div>';
+            return;
+        }
+
+        const targetLabels = { url: 'URL', title: '标题', both: 'URL+标题' };
+        const total = this.customGroups.length;
+
+        listContainer.innerHTML = this.customGroups.map((rule, idx) => `
+            <div class="rule-item" data-rule-id="${rule.id}" data-rule-idx="${idx}" draggable="true">
+                <div class="rule-item-drag-handle" title="拖拽排序">⠿</div>
+                <div class="rule-item-color" style="background:${rule.color}"></div>
+                <div class="rule-item-info">
+                    <div class="rule-item-name">
+                        <span class="rule-item-priority" title="优先级 ${idx + 1}">#${idx + 1}</span>
+                        ${this.escapeHtml(rule.name)}
+                    </div>
+                    <div class="rule-item-pattern" title="${this.escapeHtml(rule.pattern)}">${this.escapeHtml(rule.pattern)}</div>
+                </div>
+                <div class="rule-item-actions">
+                    <button class="rule-move-btn" data-rule-id="${rule.id}" data-dir="-1" title="上移（提高优先级）" ${idx === 0 ? 'disabled' : ''}>▲</button>
+                    <button class="rule-move-btn" data-rule-id="${rule.id}" data-dir="1" title="下移（降低优先级）" ${idx === total - 1 ? 'disabled' : ''}>▼</button>
+                </div>
+                <span class="rule-item-target">${targetLabels[rule.target] || rule.target}</span>
+                <button class="rule-item-delete" data-rule-id="${rule.id}" title="删除此规则">&times;</button>
+            </div>
+        `).join('');
+
+        // 绑定删除事件
+        listContainer.querySelectorAll('.rule-item-delete').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const ruleId = btn.getAttribute('data-rule-id');
+                if (ruleId) this.deleteCustomGroupRule(ruleId);
+            });
+        });
+
+        // 绑定上移/下移事件
+        listContainer.querySelectorAll('.rule-move-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const ruleId = btn.getAttribute('data-rule-id');
+                const dir = parseInt(btn.getAttribute('data-dir'), 10);
+                if (ruleId && !isNaN(dir)) this.moveCustomGroupRule(ruleId, dir);
+            });
+        });
+
+        // 拖拽排序
+        this.bindRuleDragSort(listContainer);
+    }
+
+    bindRuleDragSort(listContainer) {
+        let draggedId = null;
+
+        listContainer.querySelectorAll('.rule-item[draggable="true"]').forEach(item => {
+            item.addEventListener('dragstart', (e) => {
+                draggedId = item.getAttribute('data-rule-id');
+                item.classList.add('rule-dragging');
+                e.dataTransfer.effectAllowed = 'move';
+                // 需要设置数据，否则部分浏览器不触发 dragover
+                e.dataTransfer.setData('text/plain', draggedId);
+            });
+
+            item.addEventListener('dragend', () => {
+                draggedId = null;
+                item.classList.remove('rule-dragging');
+                listContainer.querySelectorAll('.rule-item').forEach(el => el.classList.remove('rule-drag-over'));
+            });
+
+            item.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                const overId = item.getAttribute('data-rule-id');
+                if (overId === draggedId) return;
+                // 高亮放置目标
+                listContainer.querySelectorAll('.rule-item').forEach(el => el.classList.remove('rule-drag-over'));
+                item.classList.add('rule-drag-over');
+            });
+
+            item.addEventListener('dragleave', () => {
+                item.classList.remove('rule-drag-over');
+            });
+
+            item.addEventListener('drop', (e) => {
+                e.preventDefault();
+                item.classList.remove('rule-drag-over');
+                const overId = item.getAttribute('data-rule-id');
+                if (!draggedId || !overId || draggedId === overId) return;
+
+                const fromIdx = this.customGroups.findIndex(g => g.id === draggedId);
+                const toIdx = this.customGroups.findIndex(g => g.id === overId);
+                if (fromIdx < 0 || toIdx < 0) return;
+
+                // 移动元素
+                const [moved] = this.customGroups.splice(fromIdx, 1);
+                this.customGroups.splice(toIdx, 0, moved);
+                this.saveCustomGroups();
+                this.renderRulesList();
+            });
+        });
+    }
+
     // 计算标签页数据哈希，用于判断是否需要重新计算关键词
     calculateTabsHash() {
         if (!this.tabs.length) return '';
         
-        // 创建一个简化的标签页数据用于哈希计算
+        // 创建一个简化的标签页数据用于哈希计算（包含自定义规则以检测规则变化）
         const tabsData = this.tabs.map(tab => ({
             id: tab.id,
             url: tab.url,
             title: tab.title
         }));
+        const hashSource = JSON.stringify(tabsData) + '|' + JSON.stringify(this.customGroups);
         
         // 简单的哈希算法
-        return JSON.stringify(tabsData).split('').reduce((hash, char) => {
+        return hashSource.split('').reduce((hash, char) => {
             return ((hash << 5) - hash + char.charCodeAt(0)) & 0xffffffff;
         }, 0).toString(36);
     }
@@ -1202,9 +1531,50 @@ class TabManager {
                 .map(([word, count]) => ({ word, count }));
         };
 
-        // 以主域名为分组依据
+        // ① 先计算自定义分组，收集已被自定义规则命中的 tab ID
+        const customKeywords = [];
+        const customClaimedTabIds = new Set();
+
+        if (this.customGroups && this.customGroups.length > 0) {
+            // 按数组顺序（即优先级）依次匹配，高优先级规则命中的 tab 不再参与低优先级规则
+            for (const rule of this.customGroups) {
+                try {
+                    const regex = new RegExp(rule.pattern, 'i');
+                    const matchedTabIds = [];
+
+                    for (const tab of this.tabs) {
+                        if (customClaimedTabIds.has(tab.id)) continue; // 已被更高优先级规则命中，跳过
+                        let matched = false;
+                        if (rule.target === 'url' || rule.target === 'both') {
+                            if (tab.url && regex.test(tab.url)) matched = true;
+                        }
+                        if (rule.target === 'title' || rule.target === 'both') {
+                            if (tab.title && regex.test(tab.title)) matched = true;
+                        }
+                        if (matched) matchedTabIds.push(tab.id);
+                    }
+
+                    if (matchedTabIds.length > 0) {
+                        customKeywords.push({
+                            keyword: rule.name,
+                            count: matchedTabIds.length,
+                            tabIds: matchedTabIds,
+                            type: 'custom',
+                            color: rule.color || '#f59e0b',
+                        });
+                        matchedTabIds.forEach(id => customClaimedTabIds.add(id));
+                    }
+                } catch (e) {
+                    // 跳过无效正则
+                    console.warn(`自定义分组 "${rule.name}" 正则无效:`, e);
+                }
+            }
+        }
+
+        // ② 以主域名为分组依据（跳过已被自定义规则命中的 tab）
         this.tabs.forEach(tab => {
             try {
+                if (customClaimedTabIds.has(tab.id)) return; // 已归入自定义分组，不再参与自动分组
                 const hostname = tab.url ? this.getDomain(tab.url) : '';
                 const { root, keyword: domainKeyword } = extractDomainKeywordAndRoot(hostname);
                 if (!root) return;
@@ -1234,6 +1604,7 @@ class TabManager {
         // 只保留每个主域名一个关键词，优先域名
         const keywordList = [];
         for (const [root, group] of siteMap.entries()) {
+            if (group.tabIds.length === 0) continue; // 所有 tab 都被自定义规则吃掉了，跳过
             if (group.domainKeyword) {
                 keywordList.push({
                     keyword: group.domainKeyword,
@@ -1252,7 +1623,10 @@ class TabManager {
         }
 
         // 按数量排序，取前N个
-        const result = keywordList.sort((a, b) => b.count - a.count).slice(0, TOP_KEYWORDS_COUNT);
+        const domainAndTitleKeywords = keywordList.sort((a, b) => b.count - a.count).slice(0, TOP_KEYWORDS_COUNT);
+
+        // 自定义分组优先显示，然后是域名/标题关键词
+        const result = [...customKeywords, ...domainAndTitleKeywords];
         this.keywordCache = result;
         this.lastTabsHash = currentHash;
         return result;
@@ -1277,7 +1651,14 @@ class TabManager {
             const count = keyword.count;
             let baseColor, textColor, borderColor;
             
-            if (keyword.type === 'domain') {
+            if (keyword.type === 'custom') {
+                // 自定义分组：使用规则自带颜色
+                const color = keyword.color || '#f59e0b';
+                baseColor = `${color}22`;
+                textColor = color;
+                borderColor = `${color}55`;
+                return `background: ${baseColor}; color: ${textColor}; border: 1px solid ${borderColor};`;
+            } else if (keyword.type === 'domain') {
                 // 域名关键词：蓝色系
                 if (maxCount === minCount) {
                     baseColor = '#e3f2fd';
@@ -1308,19 +1689,21 @@ class TabManager {
             return `background: ${baseColor}; color: ${textColor}; border: 1px solid ${borderColor};`;
         }
         
-        container.innerHTML = keywords.map(k => {
+        container.innerHTML = keywords.map((k, idx) => {
             const allSelected = k.tabIds.every(id => this.selectedTabs.has(id));
-            const typeIcon = k.type === 'domain' ? '🌐' : '📄';
-            const typeClass = k.type === 'domain' ? 'domain-keyword' : 'title-keyword';
+            const typeIcon = k.type === 'custom' ? '🏷️' : (k.type === 'domain' ? '🌐' : '📄');
+            const typeClass = k.type === 'custom' ? 'custom-keyword' : (k.type === 'domain' ? 'domain-keyword' : 'title-keyword');
+            const typeLabel = k.type === 'custom' ? '自定义分组' : (k.type === 'domain' ? '域名关键词' : '标题关键词');
+            const customBorderStyle = k.type === 'custom' ? `border-left-color: ${k.color || '#f59e0b'};` : '';
             
             return `
                 <button class="keyword-btn ${typeClass}${allSelected ? ' active' : ''}" 
-                        data-keyword="${k.keyword}" 
+                        data-keyword-idx="${idx}" 
                         data-type="${k.type}"
-                        title="${k.type === 'domain' ? '域名关键词' : '标题关键词'}: ${k.keyword} (${k.count}个标签页)" 
-                        style="${getKeywordStyle(k)}">
+                        title="${typeLabel}: ${k.keyword} (${k.count}个标签页)" 
+                        style="${getKeywordStyle(k)}${customBorderStyle}">
                     <span class="keyword-icon">${typeIcon}</span>
-                    <span class="keyword-text">${k.keyword}</span>
+                    <span class="keyword-text">${this.escapeHtml(k.keyword)}</span>
                     <span class="keyword-count">(${k.count})</span>
                 </button>
             `;
@@ -1329,8 +1712,8 @@ class TabManager {
         // 绑定点击事件
         container.querySelectorAll('.keyword-btn').forEach(btn => {
             btn.onclick = (e) => {
-                const keyword = btn.getAttribute('data-keyword');
-                const k = keywords.find(x => x.keyword === keyword);
+                const idx = parseInt(btn.getAttribute('data-keyword-idx'), 10);
+                const k = keywords[idx];
                 if (k && k.tabIds.every(id => this.selectedTabs.has(id))) {
                     // 如果全部已选中，则取消选中
                     k.tabIds.forEach(id => this.selectedTabs.delete(id));

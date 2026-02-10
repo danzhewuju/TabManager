@@ -12,8 +12,9 @@
             <h1>标签页管理器</h1>
             <div class="header-actions">
                 <button id="openSidePanel" class="btn btn-secondary" title="优先侧边栏（如果不可用会自动打开常驻窗口）">侧边栏</button>
-                <button id="selectAll" class="btn btn-secondary">全选</button>
-                <button id="selectNone" class="btn btn-secondary">取消全选</button>
+                <button id="openGroupSettings" class="btn btn-secondary" title="自定义分组规则设置">
+                    自定义规则
+                </button>
             </div>
         </header>
         
@@ -52,6 +53,46 @@
         </footer>
     </div>
     
+    <!-- 自定义分组规则设置弹窗 -->
+    <div id="groupSettingsModal" class="modal-overlay" style="display:none;">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h2>自定义分组规则</h2>
+                <button id="closeModal" class="modal-close" title="关闭">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-description">
+                    通过正则表达式自定义分组，匹配标签页的 URL 或标题。命中规则的标签页会自动归入对应分组。
+                </div>
+                <div class="rule-form">
+                    <div class="rule-form-row">
+                        <input type="text" id="ruleNameInput" class="rule-input" placeholder="分组名称（如：工作、购物）">
+                        <input type="text" id="rulePatternInput" class="rule-input rule-input-wide" placeholder="正则表达式（如：github\.com|gitlab\.com）">
+                    </div>
+                    <div class="rule-form-row">
+                        <label class="rule-target-label">
+                            <span>匹配目标：</span>
+                            <select id="ruleTargetSelect" class="rule-select">
+                                <option value="url">URL</option>
+                                <option value="title">标题</option>
+                                <option value="both">URL + 标题</option>
+                            </select>
+                        </label>
+                        <button id="addRuleBtn" class="btn btn-accent">添加规则</button>
+                    </div>
+                    <div id="ruleError" class="rule-error" style="display:none;"></div>
+                </div>
+                <div class="rules-list-header">
+                    <span>已有规则 <span class="rules-hint">（排在前面的优先匹配，可拖拽排序）</span></span>
+                    <span id="rulesCount" class="rules-count">0</span>
+                </div>
+                <div id="rulesList" class="rules-list">
+                    <div class="rules-empty">暂无自定义分组规则</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="popup.js"></script>
 </body>
 </html> 
