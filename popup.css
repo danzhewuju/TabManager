@@ -368,6 +368,8 @@ body.panel .container {
     box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
     cursor: pointer;
     transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
+    overflow: hidden;
+    min-width: 0;
 }
 
 .tabs-list.is-dragging,
@@ -560,12 +562,15 @@ body.panel .container {
 }
 
 .tab-url {
+    display: block;
     font-size: 12px;
     color: var(--muted);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     font-family: var(--mono);
+    min-width: 0;
+    max-width: 100%;
 }
 
 .footer {
@@ -1146,6 +1151,7 @@ body.panel .container {
     background: rgba(34, 211, 238, 0.08);
 }
 
+.rule-item-edit,
 .rule-item-delete {
     width: 24px;
     height: 24px;
@@ -1162,8 +1168,79 @@ body.panel .container {
     flex-shrink: 0;
 }
 
+.rule-item-edit:hover {
+    background: rgba(34, 211, 238, 0.12);
+    border-color: rgba(34, 211, 238, 0.28);
+    color: var(--accent);
+}
+
 .rule-item-delete:hover {
     background: rgba(244, 63, 94, 0.12);
     border-color: rgba(244, 63, 94, 0.28);
     color: var(--danger);
+}
+
+/* 编辑模式 */
+.rule-item.rule-item-editing {
+    padding: 10px;
+    border-color: rgba(34, 211, 238, 0.35);
+    background: rgba(34, 211, 238, 0.04);
+}
+
+.rule-edit-form {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.rule-edit-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.rule-edit-input {
+    flex: 1;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.rule-edit-input:focus {
+    outline: none;
+    border-color: rgba(34, 211, 238, 0.55);
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15);
+}
+
+.rule-edit-input-wide {
+    flex: 2;
+}
+
+.rule-edit-select {
+    min-width: 0;
+}
+
+.rule-edit-btns {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.rule-edit-btns .btn {
+    padding: 5px 10px;
+    font-size: 11px;
+}
+
+.rule-edit-error {
+    font-size: 11px;
+    color: var(--danger);
+    padding: 4px 8px;
+    background: rgba(244, 63, 94, 0.08);
+    border: 1px solid rgba(244, 63, 94, 0.20);
+    border-radius: 6px;
 } 

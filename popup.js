@@ -1372,6 +1372,7 @@ class TabManager {
                     <button class="rule-move-btn" data-rule-id="${rule.id}" data-dir="1" title="下移（降低优先级）" ${idx === total - 1 ? 'disabled' : ''}>▼</button>
                 </div>
                 <span class="rule-item-target">${targetLabels[rule.target] || rule.target}</span>
+                <button class="rule-item-edit" data-rule-id="${rule.id}" title="编辑此规则">✎</button>
                 <button class="rule-item-delete" data-rule-id="${rule.id}" title="删除此规则">&times;</button>
             </div>
         `).join('');
@@ -1382,6 +1383,15 @@ class TabManager {
                 e.stopPropagation();
                 const ruleId = btn.getAttribute('data-rule-id');
                 if (ruleId) this.deleteCustomGroupRule(ruleId);
+            });
+        });
+
+        // 绑定编辑事件
+        listContainer.querySelectorAll('.rule-item-edit').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const ruleId = btn.getAttribute('data-rule-id');
+                if (ruleId) this.startEditRule(ruleId);
             });
         });
 
@@ -1397,6 +1407,125 @@ class TabManager {
 
         // 拖拽排序
         this.bindRuleDragSort(listContainer);
+    }
+
+    startEditRule(ruleId) {
+        const rule = this.customGroups.find(g => g.id === ruleId);
+        if (!rule) return;
+
+        const item = document.querySelector(`.rule-item[data-rule-id="${ruleId}"]`);
+        if (!item) return;
+
+        const targetOptions = [
+            { value: 'url', label: 'URL' },
+            { value: 'title', label: '标题' },
+            { value: 'both', label: 'URL+标题' },
+        ];
+
+        // 替换为编辑表单
+        item.setAttribute('draggable', 'false');
+        item.classList.add('rule-item-editing');
+        item.innerHTML = `
+            <div class="rule-edit-form">
+                <div class="rule-edit-row">
+                    <input type="text" class="rule-edit-input" data-field="name" value="${this.escapeHtml(rule.name)}" placeholder="分组名称">
+                    <input type="text" class="rule-edit-input rule-edit-input-wide" data-field="pattern" value="${this.escapeHtml(rule.pattern)}" placeholder="正则表达式">
+                </div>
+                <div class="rule-edit-row">
+                    <label class="rule-target-label">
+                        <span>匹配：</span>
+                        <select class="rule-select rule-edit-select" data-field="target">
+                            ${targetOptions.map(o => `<option value="${o.value}" ${rule.target === o.value ? 'selected' : ''}>${o.label}</option>`).join('')}
+                        </select>
+                    </label>
+                    <div class="rule-edit-btns">
+                        <button class="btn btn-accent rule-edit-save" data-rule-id="${ruleId}">保存</button>
+                        <button class="btn btn-secondary rule-edit-cancel" data-rule-id="${ruleId}">取消</button>
+                    </div>
+                </div>
+                <div class="rule-edit-error" style="display:none;"></div>
+            </div>
+        `;
+
+        // 绑定保存
+        item.querySelector('.rule-edit-save').addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.saveEditRule(ruleId, item);
+        });
+
+        // 绑定取消
+        item.querySelector('.rule-edit-cancel').addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.renderRulesList();
+        });
+
+        // 回车保存
+        item.querySelectorAll('.rule-edit-input').forEach(input => {
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.saveEditRule(ruleId, item);
+                }
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    this.renderRulesList();
+                }
+            });
+        });
+
+        // 聚焦名称输入框
+        const nameInput = item.querySelector('[data-field="name"]');
+        if (nameInput) {
+            nameInput.focus();
+            nameInput.select();
+        }
+    }
+
+    saveEditRule(ruleId, itemEl) {
+        const rule = this.customGroups.find(g => g.id === ruleId);
+        if (!rule) return;
+
+        const nameInput = itemEl.querySelector('[data-field="name"]');
+        const patternInput = itemEl.querySelector('[data-field="pattern"]');
+        const targetSelect = itemEl.querySelector('[data-field="target"]');
+        const errorDiv = itemEl.querySelector('.rule-edit-error');
+
+        const name = (nameInput?.value ?? '').trim();
+        const pattern = (patternInput?.value ?? '').trim();
+        const target = targetSelect?.value ?? rule.target;
+
+        // 验证
+        if (!name) {
+            if (errorDiv) { errorDiv.textContent = '名称不能为空'; errorDiv.style.display = 'block'; }
+            nameInput?.focus();
+            return;
+        }
+        if (!pattern) {
+            if (errorDiv) { errorDiv.textContent = '正则不能为空'; errorDiv.style.display = 'block'; }
+            patternInput?.focus();
+            return;
+        }
+        try {
+            new RegExp(pattern, 'i');
+        } catch (e) {
+            if (errorDiv) { errorDiv.textContent = `正则无效: ${e.message}`; errorDiv.style.display = 'block'; }
+            patternInput?.focus();
+            return;
+        }
+        // 名称重复检查（排除自身）
+        if (this.customGroups.some(g => g.id !== ruleId && g.name === name)) {
+            if (errorDiv) { errorDiv.textContent = '分组名称已存在'; errorDiv.style.display = 'block'; }
+            nameInput?.focus();
+            return;
+        }
+
+        // 保存
+        rule.name = name;
+        rule.pattern = pattern;
+        rule.target = target;
+        this.saveCustomGroups();
+        this.renderRulesList();
+        this.showSuccess(`已更新规则: ${name}`);
     }
 
     bindRuleDragSort(listContainer) {
