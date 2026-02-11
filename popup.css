@@ -834,6 +834,7 @@ body.panel .container {
     cursor: pointer;
     transition: all 0.15s ease;
     line-height: 1;
+    margin-left: 2px;
 }
 
 .modal-close:hover {
@@ -951,6 +952,53 @@ body.panel .container {
     background: rgba(244, 63, 94, 0.08);
     border: 1px solid rgba(244, 63, 94, 0.20);
     border-radius: 8px;
+}
+
+/* 弹窗顶栏操作区 */
+.modal-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-ie-header {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.btn-ie-header:hover {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.10);
+    border-color: var(--accent);
+}
+
+.btn-ie-header:active {
+    transform: scale(0.96);
+}
+
+.ie-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    background: rgba(99, 102, 241, 0.15);
+    border-radius: 4px;
+    line-height: 1;
 }
 
 /* 规则列表 */

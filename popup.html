@@ -58,7 +58,16 @@
         <div class="modal-container">
             <div class="modal-header">
                 <h2>自定义分组规则</h2>
-                <button id="closeModal" class="modal-close" title="关闭">&times;</button>
+                <div class="modal-header-actions">
+                    <button id="exportRulesBtn" class="btn btn-ie-header" title="将规则导出为 JSON 文件">
+                        <span class="ie-icon">↑</span> 导出
+                    </button>
+                    <button id="importRulesBtn" class="btn btn-ie-header" title="从 JSON 文件导入规则">
+                        <span class="ie-icon">↓</span> 导入
+                    </button>
+                    <input type="file" id="importRulesFile" accept=".json" style="display:none;">
+                    <button id="closeModal" class="modal-close" title="关闭">&times;</button>
+                </div>
             </div>
             <div class="modal-body">
                 <div class="modal-description">

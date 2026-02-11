@@ -129,6 +129,31 @@ class TabManager {
             });
         }
 
+        // 导出规则按钮
+        const exportRulesBtn = document.getElementById('exportRulesBtn');
+        if (exportRulesBtn) {
+            exportRulesBtn.addEventListener('click', () => {
+                this.exportRules();
+            });
+        }
+
+        // 导入规则按钮
+        const importRulesBtn = document.getElementById('importRulesBtn');
+        if (importRulesBtn) {
+            importRulesBtn.addEventListener('click', () => {
+                this.importRules();
+            });
+        }
+
+        // 导入文件选择
+        const importRulesFile = document.getElementById('importRulesFile');
+        if (importRulesFile) {
+            importRulesFile.addEventListener('change', (e) => {
+                const file = e.target.files?.[0];
+                if (file) this.handleImportFile(file);
+            });
+        }
+
         // 规则输入框回车提交
         const rulePatternInput = document.getElementById('rulePatternInput');
         if (rulePatternInput) {
@@ -1526,6 +1551,156 @@ class TabManager {
         this.saveCustomGroups();
         this.renderRulesList();
         this.showSuccess(`已更新规则: ${name}`);
+    }
+
+    // ---- 导入 / 导出规则 ----
+
+    exportRules() {
+        if (this.customGroups.length === 0) {
+            this.showError('当前没有可导出的规则');
+            return;
+        }
+
+        const exportData = {
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            rules: this.customGroups.map(({ id, name, pattern, target, color }) => ({
+                name, pattern, target, color,
+            })),
+        };
+
+        const json = JSON.stringify(exportData, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tab-manager-rules-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        this.showSuccess(`已导出 ${this.customGroups.length} 条规则`);
+    }
+
+    importRules() {
+        const fileInput = document.getElementById('importRulesFile');
+        if (!fileInput) return;
+        // 重置值以确保重复选同一文件也能触发 change
+        fileInput.value = '';
+        fileInput.click();
+    }
+
+    handleImportFile(file) {
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                this.processImportData(data);
+            } catch (err) {
+                this.showError('文件格式无效，请选择正确的 JSON 文件');
+            }
+        };
+        reader.onerror = () => {
+            this.showError('读取文件失败');
+        };
+        reader.readAsText(file);
+    }
+
+    processImportData(data) {
+        // 兼容两种格式：带 version 的包裹格式 和 纯数组格式
+        let rules;
+        if (Array.isArray(data)) {
+            rules = data;
+        } else if (data && Array.isArray(data.rules)) {
+            rules = data.rules;
+        } else {
+            this.showError('无法识别的规则文件格式');
+            return;
+        }
+
+        // 验证每条规则
+        const validRules = [];
+        const errors = [];
+
+        for (let i = 0; i < rules.length; i++) {
+            const r = rules[i];
+            if (!r || typeof r !== 'object') {
+                errors.push(`第 ${i + 1} 条：不是有效的规则对象`);
+                continue;
+            }
+            if (!r.name || typeof r.name !== 'string') {
+                errors.push(`第 ${i + 1} 条：缺少名称`);
+                continue;
+            }
+            if (!r.pattern || typeof r.pattern !== 'string') {
+                errors.push(`第 ${i + 1} 条 "${r.name}"：缺少正则表达式`);
+                continue;
+            }
+            try {
+                new RegExp(r.pattern, 'i');
+            } catch (err) {
+                errors.push(`第 ${i + 1} 条 "${r.name}"：正则表达式无效`);
+                continue;
+            }
+            const target = ['url', 'title', 'both'].includes(r.target) ? r.target : 'url';
+            const color = (typeof r.color === 'string' && r.color.startsWith('#')) ? r.color : null;
+
+            validRules.push({ name: r.name, pattern: r.pattern, target, color });
+        }
+
+        if (validRules.length === 0) {
+            this.showError('导入失败：没有有效的规则' + (errors.length ? `\n${errors.join('；')}` : ''));
+            return;
+        }
+
+        // 合并：跳过同名规则，新规则追加到末尾
+        const existingNames = new Set(this.customGroups.map(g => g.name));
+        const usedColors = new Set(this.customGroups.map(g => g.color));
+        let addedCount = 0;
+        let skippedCount = 0;
+
+        for (const r of validRules) {
+            if (existingNames.has(r.name)) {
+                skippedCount++;
+                continue;
+            }
+
+            // 分配颜色
+            const assignedColor = r.color && !usedColors.has(r.color)
+                ? r.color
+                : TabManager.GROUP_COLORS.find(c => !usedColors.has(c))
+                    || TabManager.GROUP_COLORS[this.customGroups.length % TabManager.GROUP_COLORS.length];
+
+            const rule = {
+                id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+                name: r.name,
+                pattern: r.pattern,
+                target: r.target,
+                color: assignedColor,
+            };
+
+            this.customGroups.push(rule);
+            existingNames.add(r.name);
+            usedColors.add(assignedColor);
+            addedCount++;
+        }
+
+        this.saveCustomGroups();
+        this.renderRulesList();
+
+        // 显示结果
+        let msg = `成功导入 ${addedCount} 条规则`;
+        if (skippedCount > 0) {
+            msg += `，跳过 ${skippedCount} 条同名规则`;
+        }
+        if (errors.length > 0) {
+            msg += `，${errors.length} 条无效`;
+        }
+        this.showSuccess(msg);
     }
 
     bindRuleDragSort(listContainer) {
