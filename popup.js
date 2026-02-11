@@ -58,7 +58,6 @@ class TabManager {
         await this.loadTabs();
         this.renderTabs();
         this.updateStats();
-        this.renderKeywordSuggestions();
         this.showKeyboardShortcuts();
     }
 
@@ -178,22 +177,6 @@ class TabManager {
             });
         }
 
-        // 全选按钮
-        const selectAllBtn = document.getElementById('selectAll');
-        if (selectAllBtn) {
-            selectAllBtn.addEventListener('click', () => {
-                this.selectAllTabs();
-            });
-        }
-
-        // 取消全选按钮
-        const selectNoneBtn = document.getElementById('selectNone');
-        if (selectNoneBtn) {
-            selectNoneBtn.addEventListener('click', () => {
-                this.clearSelection();
-            });
-        }
-
         // 反选按钮（对当前筛选结果逐个取反）
         const invertSelectionBtn = document.getElementById('invertSelection');
         if (invertSelectionBtn) {
@@ -209,11 +192,7 @@ class TabManager {
 
         // 关闭按钮
         document.getElementById('closePopup').addEventListener('click', () => {
-            if (this.isStandalone) {
-                window.close();
-            } else {
-                window.close();
-            }
+            window.close();
         });
 
         // 正则匹配切换按钮
@@ -346,20 +325,13 @@ class TabManager {
 
         // 规则：如果“单列布局”会溢出（需要滚动），则启用两列。
         // 注意：两列会改变 scrollHeight，因此必须以“单列”作为判断基准，避免抖动。
-        const hadTwoColumn = tabsContainer.classList.contains('two-column');
         tabsContainer.classList.remove('two-column');
 
         const overflowInSingleColumn = tabsContainer.scrollHeight > tabsContainer.clientHeight + 8;
 
         if (overflowInSingleColumn) {
             tabsContainer.classList.add('two-column');
-        } else {
-            tabsContainer.classList.remove('two-column');
         }
-
-        // 如果之前是两列，但单列不溢出，则保持移除即可（上面已处理）。
-        // hadTwoColumn 仅用于表达意图，防止未来改逻辑时误用。
-        void hadTwoColumn;
     }
 
     showKeyboardShortcuts() {
@@ -392,11 +364,9 @@ class TabManager {
         
         if (this.isRegexMode) {
             regexButton.classList.add('active');
-            regexIcon.textContent = '.*';
             regexButton.title = '当前：正则匹配模式';
         } else {
             regexButton.classList.remove('active');
-            regexIcon.textContent = '.*';
             regexButton.title = '当前：普通搜索模式';
         }
         
@@ -926,7 +896,6 @@ class TabManager {
                 el.style.display = '';
                 el.classList.remove('tab-drag-hidden');
             });
-            void sourceEl;
             if (tabsList) tabsList.classList.remove('is-dragging');
 
             this._drag.active = false;
@@ -962,7 +931,6 @@ class TabManager {
             this.selectedTabs.add(tab.id);
         });
         this.renderTabs();
-        this.syncSelectAllCheckbox();
         this.updateStats();
         this.updateDeleteButton();
     }
@@ -973,7 +941,6 @@ class TabManager {
             this.selectedTabs.delete(tab.id);
         });
         this.renderTabs();
-        this.syncSelectAllCheckbox();
         this.updateStats();
         this.updateDeleteButton();
     }
@@ -988,7 +955,6 @@ class TabManager {
             }
         });
         this.renderTabs();
-        this.syncSelectAllCheckbox();
         this.updateStats();
         this.updateDeleteButton();
     }
@@ -1019,10 +985,7 @@ class TabManager {
                     this.lastTabsHash = null;
                     
                     this.filterTabs(document.getElementById('searchInput').value);
-                    this.renderTabs();
-                    this.updateStats();
                     this.updateDeleteButton();
-                    this.renderKeywordSuggestions();
                     
                     this.showSuccess(`成功删除 ${response.closedCount} 个标签页`);
                 } else {
@@ -1041,10 +1004,7 @@ class TabManager {
                 this.lastTabsHash = null;
                 
                 this.filterTabs(document.getElementById('searchInput').value);
-                this.renderTabs();
-                this.updateStats();
                 this.updateDeleteButton();
-                this.renderKeywordSuggestions();
                 
                 this.showSuccess(`成功删除 ${tabIds.length} 个标签页`);
             }
@@ -1072,7 +1032,6 @@ class TabManager {
 
         this.renderTabs();
         this.updateStats();
-        this.renderKeywordSuggestions();
     }
 
     matchesRegex(tab, pattern) {
@@ -1782,7 +1741,11 @@ class TabManager {
 
         const siteMap = new Map(); // 主域名 => { domainKeyword, titleKeywords, tabIds }
         const stopWords = new Set([
-            'www', 'com', 'cn', 'net', 'org', 'edu', 'gov', 'mil', 'int', 'io', 'co', 'uk', 'us', 'de', 'fr', 'jp', 'ru', 'br', 'in', 'it', 'au', 'ca', 'mx', 'kr', 'es', 'se', 'nl', 'ch', 'at', 'be', 'dk', 'no', 'pl', 'pt', 'tr', 'ar', 'cl', 'pe', 've', 'co', 'ec', 'bo', 'py', 'uy', 'gy', 'sr', 'gf', 'pf', 'nc', 're', 'yt', 'pm', 'wf', 'tf', 'bl', 'mf', 'sx', 'cw', 'aw', 'bq', 'cw', 'sx', 'bq', 'aw', 'mf', 'bl', 'pm', 'yt', 're', 'nc', 'pf', 'gf', 'sr', 'gy', 'uy', 'py', 'bo', 'ec', 'co', 've', 'pe', 'cl', 'ar', 'tr', 'pt', 'pl', 'no', 'dk', 'be', 'at', 'ch', 'nl', 'se', 'es', 'kr', 'mx', 'ca', 'au', 'it', 'in', 'br', 'ru', 'jp', 'fr', 'de', 'us', 'uk', 'io', 'mil', 'gov', 'edu', 'org', 'net', 'cn', 'com', 'www'
+            'www', 'com', 'cn', 'net', 'org', 'edu', 'gov', 'mil', 'int', 'io', 'co',
+            'uk', 'us', 'de', 'fr', 'jp', 'ru', 'br', 'in', 'it', 'au', 'ca', 'mx',
+            'kr', 'es', 'se', 'nl', 'ch', 'at', 'be', 'dk', 'no', 'pl', 'pt', 'tr',
+            'ar', 'cl', 'pe', 've', 'ec', 'bo', 'py', 'uy', 'gy', 'sr', 'gf', 'pf',
+            'nc', 're', 'yt', 'pm', 'wf', 'tf', 'bl', 'mf', 'sx', 'cw', 'aw', 'bq',
         ]);
         const commonSubdomains = new Set(['www', 'm', 'mobile', 'app', 'api', 'cdn', 'static', 'img', 'images', 'js', 'css', 'blog', 'shop', 'store', 'news', 'help', 'support', 'docs', 'dev', 'test', 'staging', 'beta', 'alpha']);
 

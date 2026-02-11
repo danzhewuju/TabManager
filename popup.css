@@ -383,11 +383,7 @@ body.panel .container {
     box-shadow: none;
 }
 
-.tab-item.tab-drag-source {
-    opacity: 0.2;
-}
-
-.tab-drag-ghost {
+.tab-item.tab-drag-ghost {
     position: fixed;
     z-index: 9999;
     opacity: 0.92;
@@ -643,27 +639,6 @@ body.panel .container {
     font-size: 48px;
     margin-bottom: 16px;
     opacity: 0.5;
-}
-
-.loading {
-    text-align: center;
-    padding: 40px 20px;
-    color: var(--muted);
-}
-
-.spinner {
-    border: 3px solid rgba(255, 255, 255, 0.10);
-    border-top: 3px solid var(--accent);
-    border-radius: 50%;
-    width: 24px;
-    height: 24px;
-    animation: spin 1s linear infinite;
-    margin: 0 auto 16px;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
 }
 
 /* 滚动条样式 */
