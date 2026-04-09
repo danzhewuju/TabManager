@@ -20,6 +20,7 @@ class TabManager {
         this.currentTabId = null; // 当前激活的 tab id（用于高亮定位）
         this.currentWindowId = null; // 当前激活 tab 所在 window id
         this._scrolledToCurrentOnce = false;
+        this._webdavAutoUpload = false;
         this._drag = {
             pressTimer: null,
             active: false,
@@ -55,6 +56,7 @@ class TabManager {
         this.bindEvents();
         this.enableLiveTabRefresh();
         await this.loadCustomGroups();
+        await this.loadWebdavPreferences();
         await this.loadTabs();
         this.renderTabs();
         this.updateStats();
@@ -99,6 +101,57 @@ class TabManager {
         if (openGroupSettingsBtn) {
             openGroupSettingsBtn.addEventListener('click', () => {
                 this.openGroupSettingsModal();
+            });
+        }
+
+        const openWebdavBtn = document.getElementById('openWebdavSettings');
+        if (openWebdavBtn) {
+            openWebdavBtn.addEventListener('click', () => {
+                this.openWebdavModal();
+            });
+        }
+
+        const closeWebdavBtn = document.getElementById('closeWebdavModal');
+        if (closeWebdavBtn) {
+            closeWebdavBtn.addEventListener('click', () => {
+                this.closeWebdavModal();
+            });
+        }
+
+        const webdavModal = document.getElementById('webdavModal');
+        if (webdavModal) {
+            webdavModal.addEventListener('click', (e) => {
+                if (e.target === webdavModal) {
+                    this.closeWebdavModal();
+                }
+            });
+        }
+
+        const webdavTestBtn = document.getElementById('webdavTestBtn');
+        if (webdavTestBtn) {
+            webdavTestBtn.addEventListener('click', () => {
+                this.webdavTestFromForm();
+            });
+        }
+
+        const webdavUploadBtn = document.getElementById('webdavUploadBtn');
+        if (webdavUploadBtn) {
+            webdavUploadBtn.addEventListener('click', () => {
+                this.webdavUploadFromForm();
+            });
+        }
+
+        const webdavDownloadBtn = document.getElementById('webdavDownloadBtn');
+        if (webdavDownloadBtn) {
+            webdavDownloadBtn.addEventListener('click', () => {
+                this.webdavDownloadFromForm();
+            });
+        }
+
+        const webdavSaveConfigBtn = document.getElementById('webdavSaveConfigBtn');
+        if (webdavSaveConfigBtn) {
+            webdavSaveConfigBtn.addEventListener('click', () => {
+                this.saveWebdavConfigFromForm();
             });
         }
 
@@ -1196,6 +1249,11 @@ class TabManager {
             // 清除关键词缓存，触发重新计算
             this.keywordCache = null;
             this.lastTabsHash = null;
+            if (this._webdavAutoUpload) {
+                this.webdavUploadSilent().catch((err) => {
+                    console.warn('WebDAV 自动上传失败:', err);
+                });
+            }
         } catch (e) {
             console.error('保存自定义分组规则失败:', e);
             this.showError('保存分组规则失败');
@@ -1555,10 +1613,10 @@ class TabManager {
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
             try {
                 const data = JSON.parse(e.target.result);
-                this.processImportData(data);
+                await this.processImportData(data);
             } catch (err) {
                 this.showError('文件格式无效，请选择正确的 JSON 文件');
             }
@@ -1569,7 +1627,8 @@ class TabManager {
         reader.readAsText(file);
     }
 
-    processImportData(data) {
+    async processImportData(data, options = {}) {
+        const replace = options.replace === true;
         // 兼容两种格式：带 version 的包裹格式 和 纯数组格式
         let rules;
         if (Array.isArray(data)) {
@@ -1616,6 +1675,29 @@ class TabManager {
             return;
         }
 
+        if (replace) {
+            this.customGroups = validRules.map((r, i) => {
+                const assignedColor = r.color && r.color.startsWith('#')
+                    ? r.color
+                    : TabManager.GROUP_COLORS[i % TabManager.GROUP_COLORS.length];
+                return {
+                    id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}_${i}`,
+                    name: r.name,
+                    pattern: r.pattern,
+                    target: r.target,
+                    color: assignedColor,
+                };
+            });
+            await this.saveCustomGroups();
+            this.renderRulesList();
+            let msg = `已用远程数据替换本地规则，共 ${this.customGroups.length} 条`;
+            if (errors.length > 0) {
+                msg += `（已忽略 ${errors.length} 条无效项）`;
+            }
+            this.showSuccess(msg);
+            return;
+        }
+
         // 合并：跳过同名规则，新规则追加到末尾
         const existingNames = new Set(this.customGroups.map(g => g.name));
         const usedColors = new Set(this.customGroups.map(g => g.color));
@@ -1648,7 +1730,7 @@ class TabManager {
             addedCount++;
         }
 
-        this.saveCustomGroups();
+        await this.saveCustomGroups();
         this.renderRulesList();
 
         // 显示结果
@@ -1711,6 +1793,377 @@ class TabManager {
                 this.renderRulesList();
             });
         });
+    }
+
+    // ========= WebDAV 同步 =========
+
+    async loadWebdavPreferences() {
+        try {
+            const r = await chrome.storage.sync.get('webdavConfig');
+            const c = r.webdavConfig;
+            this._webdavAutoUpload = !!(c && c.autoUpload);
+        } catch {
+            this._webdavAutoUpload = false;
+        }
+    }
+
+    async getWebdavMergedConfig() {
+        const [syncRes, localRes] = await Promise.all([
+            chrome.storage.sync.get('webdavConfig'),
+            chrome.storage.local.get('webdavPassword'),
+        ]);
+        const c = syncRes.webdavConfig || {};
+        return {
+            baseUrl: String(c.baseUrl || '').trim(),
+            remotePath: String(c.remotePath || '').trim(),
+            username: String(c.username || '').trim(),
+            password: String(localRes.webdavPassword || ''),
+            autoUpload: !!c.autoUpload,
+        };
+    }
+
+    buildRulesExportJson() {
+        return JSON.stringify({
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            rules: this.customGroups.map(({ id, name, pattern, target, color }) => ({
+                name, pattern, target, color,
+            })),
+        }, null, 2);
+    }
+
+    async ensureWebdavPermissionForUrl(fileUrl) {
+        if (typeof TabManagerWebDAV === 'undefined') {
+            throw new Error('WebDAV 模块未加载');
+        }
+        const pattern = TabManagerWebDAV.originPatternFromUrl(fileUrl);
+        if (!pattern) {
+            throw new Error('无法解析服务器地址');
+        }
+        if (!chrome.permissions || typeof chrome.permissions.contains !== 'function') {
+            throw new Error('权限 API 不可用');
+        }
+        const has = await chrome.permissions.contains({ origins: [pattern] });
+        if (has) {
+            return;
+        }
+        const granted = await chrome.permissions.request({ origins: [pattern] });
+        if (!granted) {
+            throw new Error('需要本扩展访问该 WebDAV 地址的权限');
+        }
+    }
+
+    async webdavUploadSilent() {
+        if (typeof TabManagerWebDAV === 'undefined') {
+            return;
+        }
+        const cfg = await this.getWebdavMergedConfig();
+        if (!cfg.autoUpload || !cfg.baseUrl || !cfg.remotePath) {
+            return;
+        }
+        const fileUrl = TabManagerWebDAV.resolveFileUrl(cfg.baseUrl, cfg.remotePath);
+        await this.ensureWebdavPermissionForUrl(fileUrl);
+        const json = this.buildRulesExportJson();
+        const { ok, status } = await TabManagerWebDAV.putText(fileUrl, json, {
+            username: cfg.username,
+            password: cfg.password,
+        });
+        if (!ok) {
+            throw new Error(`HTTP ${status}`);
+        }
+        const now = new Date().toISOString();
+        const prev = await chrome.storage.sync.get('webdavConfig');
+        const prevC = prev.webdavConfig || {};
+        await chrome.storage.sync.set({
+            webdavConfig: {
+                ...prevC,
+                lastSyncAt: now,
+                lastSyncError: null,
+            },
+        });
+    }
+
+    webdavShowFormError(message) {
+        const el = document.getElementById('webdavFormError');
+        if (!el) {
+            return;
+        }
+        if (message) {
+            el.textContent = message;
+            el.style.display = 'block';
+        } else {
+            el.style.display = 'none';
+        }
+    }
+
+    webdavSetStatus(text) {
+        const el = document.getElementById('webdavStatusLine');
+        if (el) {
+            el.textContent = text || '';
+        }
+    }
+
+    openWebdavModal() {
+        const modal = document.getElementById('webdavModal');
+        if (modal) {
+            modal.style.display = 'flex';
+            this.fillWebdavFormFromStorage();
+        }
+    }
+
+    closeWebdavModal() {
+        const modal = document.getElementById('webdavModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+        this.webdavShowFormError('');
+    }
+
+    async fillWebdavFormFromStorage() {
+        const cfg = await this.getWebdavMergedConfig();
+        const syncRes = await chrome.storage.sync.get('webdavConfig');
+        const c = syncRes.webdavConfig || {};
+        const baseEl = document.getElementById('webdavBaseUrl');
+        const pathEl = document.getElementById('webdavRemotePath');
+        const userEl = document.getElementById('webdavUsername');
+        const passEl = document.getElementById('webdavPassword');
+        const autoEl = document.getElementById('webdavAutoUpload');
+        if (baseEl) {
+            baseEl.value = cfg.baseUrl || '';
+        }
+        if (pathEl) {
+            pathEl.value = cfg.remotePath || 'TabManager/tab-manager-rules.json';
+        }
+        if (userEl) {
+            userEl.value = cfg.username || '';
+        }
+        if (passEl) {
+            passEl.value = cfg.password || '';
+        }
+        if (autoEl) {
+            autoEl.checked = !!c.autoUpload;
+        }
+        const last = c.lastSyncAt ? `上次同步：${c.lastSyncAt}` : '';
+        const err = c.lastSyncError ? ` 错误：${c.lastSyncError}` : '';
+        this.webdavSetStatus(last + err);
+    }
+
+    async saveWebdavConfigFromForm() {
+        this.webdavShowFormError('');
+        const baseUrl = (document.getElementById('webdavBaseUrl')?.value || '').trim();
+        const remotePath = (document.getElementById('webdavRemotePath')?.value || '').trim();
+        const username = (document.getElementById('webdavUsername')?.value || '').trim();
+        const password = (document.getElementById('webdavPassword')?.value || '').trim();
+        const autoUpload = !!document.getElementById('webdavAutoUpload')?.checked;
+
+        if (!baseUrl || !remotePath) {
+            this.webdavShowFormError('请填写服务器根地址与远程文件路径');
+            return;
+        }
+
+        let fileUrl;
+        try {
+            fileUrl = TabManagerWebDAV.resolveFileUrl(baseUrl, remotePath);
+        } catch (e) {
+            this.webdavShowFormError(String(e && e.message ? e.message : e));
+            return;
+        }
+
+        try {
+            await this.ensureWebdavPermissionForUrl(fileUrl);
+        } catch (e) {
+            this.webdavShowFormError(String(e && e.message ? e.message : e));
+            return;
+        }
+
+        const prev = await chrome.storage.sync.get('webdavConfig');
+        const prevC = prev.webdavConfig || {};
+        await chrome.storage.sync.set({
+            webdavConfig: {
+                ...prevC,
+                baseUrl,
+                remotePath,
+                username,
+                autoUpload,
+            },
+        });
+        await chrome.storage.local.set({ webdavPassword: password });
+        this._webdavAutoUpload = autoUpload;
+        this.showSuccess('WebDAV 配置已保存');
+    }
+
+    async webdavTestFromForm() {
+        this.webdavShowFormError('');
+        const baseUrl = (document.getElementById('webdavBaseUrl')?.value || '').trim();
+        const remotePath = (document.getElementById('webdavRemotePath')?.value || '').trim();
+        const username = (document.getElementById('webdavUsername')?.value || '').trim();
+        const password = (document.getElementById('webdavPassword')?.value || '').trim();
+        if (!baseUrl || !remotePath) {
+            this.webdavShowFormError('请填写服务器根地址与远程文件路径');
+            return;
+        }
+        let fileUrl;
+        try {
+            fileUrl = TabManagerWebDAV.resolveFileUrl(baseUrl, remotePath);
+        } catch (e) {
+            this.webdavShowFormError(String(e && e.message ? e.message : e));
+            return;
+        }
+        try {
+            await this.ensureWebdavPermissionForUrl(fileUrl);
+        } catch (e) {
+            this.webdavShowFormError(String(e && e.message ? e.message : e));
+            return;
+        }
+        try {
+            const result = await TabManagerWebDAV.testConnection(fileUrl, { username, password });
+            if (result.ok) {
+                this.showSuccess('测试成功');
+            } else {
+                this.showError(result.message ? `测试失败：${result.message}` : '测试失败');
+            }
+        } catch (e) {
+            this.showError(`测试失败：${String(e && e.message ? e.message : e)}`);
+        }
+    }
+
+    async webdavUploadFromForm() {
+        this.webdavShowFormError('');
+        if (this.customGroups.length === 0) {
+            this.showError('当前没有可同步的规则');
+            return;
+        }
+        const baseUrl = (document.getElementById('webdavBaseUrl')?.value || '').trim();
+        const remotePath = (document.getElementById('webdavRemotePath')?.value || '').trim();
+        const username = (document.getElementById('webdavUsername')?.value || '').trim();
+        const password = (document.getElementById('webdavPassword')?.value || '').trim();
+        const autoUpload = !!document.getElementById('webdavAutoUpload')?.checked;
+        if (!baseUrl || !remotePath) {
+            this.webdavShowFormError('请填写服务器根地址与远程文件路径');
+            return;
+        }
+        let fileUrl;
+        try {
+            fileUrl = TabManagerWebDAV.resolveFileUrl(baseUrl, remotePath);
+        } catch (e) {
+            this.webdavShowFormError(String(e && e.message ? e.message : e));
+            return;
+        }
+        try {
+            await this.ensureWebdavPermissionForUrl(fileUrl);
+        } catch (e) {
+            this.webdavShowFormError(String(e && e.message ? e.message : e));
+            return;
+        }
+        try {
+            const json = this.buildRulesExportJson();
+            const { ok, status, bodyText } = await TabManagerWebDAV.putText(fileUrl, json, {
+                username,
+                password,
+            });
+            if (!ok) {
+                throw new Error(bodyText || `HTTP ${status}`);
+            }
+            const now = new Date().toISOString();
+            const prev = await chrome.storage.sync.get('webdavConfig');
+            const prevC = prev.webdavConfig || {};
+            await chrome.storage.sync.set({
+                webdavConfig: {
+                    ...prevC,
+                    baseUrl,
+                    remotePath,
+                    username,
+                    autoUpload,
+                    lastSyncAt: now,
+                    lastSyncError: null,
+                },
+            });
+            await chrome.storage.local.set({ webdavPassword: password });
+            this._webdavAutoUpload = autoUpload;
+            this.webdavSetStatus(`上次同步：${now}`);
+            this.showSuccess('已上传到 WebDAV');
+        } catch (e) {
+            const msg = String(e && e.message ? e.message : e);
+            const prev = await chrome.storage.sync.get('webdavConfig');
+            const prevC = prev.webdavConfig || {};
+            await chrome.storage.sync.set({
+                webdavConfig: {
+                    ...prevC,
+                    lastSyncError: msg,
+                },
+            });
+            this.showError(`上传失败：${msg}`);
+        }
+    }
+
+    async webdavDownloadFromForm() {
+        this.webdavShowFormError('');
+        const baseUrl = (document.getElementById('webdavBaseUrl')?.value || '').trim();
+        const remotePath = (document.getElementById('webdavRemotePath')?.value || '').trim();
+        const username = (document.getElementById('webdavUsername')?.value || '').trim();
+        const password = (document.getElementById('webdavPassword')?.value || '').trim();
+        const autoUpload = !!document.getElementById('webdavAutoUpload')?.checked;
+        if (!baseUrl || !remotePath) {
+            this.webdavShowFormError('请填写服务器根地址与远程文件路径');
+            return;
+        }
+        let fileUrl;
+        try {
+            fileUrl = TabManagerWebDAV.resolveFileUrl(baseUrl, remotePath);
+        } catch (e) {
+            this.webdavShowFormError(String(e && e.message ? e.message : e));
+            return;
+        }
+        try {
+            await this.ensureWebdavPermissionForUrl(fileUrl);
+        } catch (e) {
+            this.webdavShowFormError(String(e && e.message ? e.message : e));
+            return;
+        }
+        try {
+            const { ok, status, text } = await TabManagerWebDAV.getText(fileUrl, {
+                username,
+                password,
+            });
+            if (status === 404) {
+                this.showError('远程文件不存在，请先上传或检查路径');
+                return;
+            }
+            if (!ok) {
+                this.showError(`下载失败：HTTP ${status}`);
+                return;
+            }
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch {
+                this.showError('远程文件不是有效的 JSON');
+                return;
+            }
+            if (!window.confirm('将用云端规则完全替换本地自定义规则，是否继续？')) {
+                return;
+            }
+            await this.processImportData(data, { replace: true });
+            const now = new Date().toISOString();
+            const prev = await chrome.storage.sync.get('webdavConfig');
+            const prevC = prev.webdavConfig || {};
+            await chrome.storage.sync.set({
+                webdavConfig: {
+                    ...prevC,
+                    baseUrl,
+                    remotePath,
+                    username,
+                    autoUpload,
+                    lastSyncAt: now,
+                    lastSyncError: null,
+                },
+            });
+            await chrome.storage.local.set({ webdavPassword: password });
+            this._webdavAutoUpload = autoUpload;
+            this.webdavSetStatus(`上次同步：${now}`);
+        } catch (e) {
+            this.showError(`拉取失败：${String(e && e.message ? e.message : e)}`);
+        }
     }
 
     // 计算标签页数据哈希，用于判断是否需要重新计算关键词

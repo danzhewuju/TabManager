@@ -15,6 +15,9 @@
                 <button id="openGroupSettings" class="btn btn-secondary" title="自定义分组规则设置">
                     自定义规则
                 </button>
+                <button id="openWebdavSettings" class="btn btn-secondary" title="WebDAV 同步分组规则">
+                    WebDAV
+                </button>
             </div>
         </header>
         
@@ -102,6 +105,52 @@
         </div>
     </div>
 
+    <!-- WebDAV 同步设置 -->
+    <div id="webdavModal" class="modal-overlay" style="display:none;">
+        <div class="modal-container webdav-modal-container">
+            <div class="modal-header">
+                <h2>WebDAV 同步</h2>
+                <button id="closeWebdavModal" class="modal-close" title="关闭">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-description">
+                    将「自定义分组规则」同步到支持 WebDAV 的网盘（如 Nextcloud、坚果云 WebDAV 等）。请填写服务器提供的根地址与远程文件相对路径。「测试连接」优先使用 HEAD 请求，只校验地址与认证，不下载文件内容；若服务端不支持 HEAD，会自动改用 GET。
+                </div>
+                <div id="webdavFormError" class="rule-error" style="display:none;"></div>
+                <div class="webdav-form">
+                    <label class="webdav-field">
+                        <span class="webdav-label">服务器根地址</span>
+                        <input type="url" id="webdavBaseUrl" class="rule-input" placeholder="https://example.com/remote.php/dav/files/user/" autocomplete="off">
+                    </label>
+                    <label class="webdav-field">
+                        <span class="webdav-label">远程文件路径</span>
+                        <input type="text" id="webdavRemotePath" class="rule-input" placeholder="TabManager/tab-manager-rules.json" autocomplete="off">
+                    </label>
+                    <label class="webdav-field">
+                        <span class="webdav-label">用户名</span>
+                        <input type="text" id="webdavUsername" class="rule-input" placeholder="可选" autocomplete="username">
+                    </label>
+                    <label class="webdav-field">
+                        <span class="webdav-label">密码</span>
+                        <input type="password" id="webdavPassword" class="rule-input" placeholder="应用专用密码或登录密码" autocomplete="current-password">
+                    </label>
+                    <label class="webdav-checkbox">
+                        <input type="checkbox" id="webdavAutoUpload">
+                        <span>保存规则后自动上传到 WebDAV</span>
+                    </label>
+                </div>
+                <div id="webdavStatusLine" class="webdav-status-line"></div>
+                <div class="webdav-actions">
+                    <button type="button" id="webdavTestBtn" class="btn btn-secondary">测试连接</button>
+                    <button type="button" id="webdavDownloadBtn" class="btn btn-secondary">从云端拉取</button>
+                    <button type="button" id="webdavUploadBtn" class="btn btn-accent">上传到云端</button>
+                    <button type="button" id="webdavSaveConfigBtn" class="btn btn-ie-header">保存配置</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="webdav.js"></script>
     <script src="popup.js"></script>
 </body>
 </html> 
