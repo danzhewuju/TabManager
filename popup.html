@@ -18,6 +18,9 @@
                 <button id="openWebdavSettings" class="btn btn-secondary" title="WebDAV 同步分组规则">
                     WebDAV
                 </button>
+                <button id="openConfigBackup" class="btn btn-secondary" title="导入 / 导出配置文件（规则 + WebDAV 配置）">
+                    备份
+                </button>
             </div>
         </header>
         
@@ -146,6 +149,46 @@
                     <button type="button" id="webdavUploadBtn" class="btn btn-accent">上传到云端</button>
                     <button type="button" id="webdavSaveConfigBtn" class="btn btn-ie-header">保存配置</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 配置文件导入 / 导出 -->
+    <div id="configBackupModal" class="modal-overlay" style="display:none;">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h2>配置导入 / 导出</h2>
+                <button id="closeConfigBackupModal" class="modal-close" title="关闭">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-description">
+                    将「自定义分组规则」与「WebDAV 同步配置」打包为一个 JSON 文件，方便在不同设备间迁移或备份。
+                </div>
+                <div id="configBackupError" class="rule-error" style="display:none;"></div>
+
+                <div class="config-backup-section">
+                    <div class="config-backup-section-title">导出配置</div>
+                    <label class="webdav-checkbox">
+                        <input type="checkbox" id="configExportIncludePassword">
+                        <span>包含 WebDAV 密码（导出文件中将含有明文密码，请妥善保管）</span>
+                    </label>
+                    <div class="webdav-actions">
+                        <button type="button" id="configExportBtn" class="btn btn-accent">导出为 JSON 文件</button>
+                    </div>
+                </div>
+
+                <div class="config-backup-section">
+                    <div class="config-backup-section-title">导入配置</div>
+                    <div class="modal-description config-backup-hint">
+                        导入会覆盖本地对应的配置项；若文件中缺少某项则保持本地不变。同时兼容旧版本仅规则的 JSON 文件。
+                    </div>
+                    <div class="webdav-actions">
+                        <button type="button" id="configImportBtn" class="btn btn-ie-header">选择文件导入…</button>
+                        <input type="file" id="configImportFile" accept=".json,application/json" style="display:none;">
+                    </div>
+                </div>
+
+                <div id="configBackupStatus" class="webdav-status-line"></div>
             </div>
         </div>
     </div>

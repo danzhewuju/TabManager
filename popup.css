@@ -1342,3 +1342,25 @@ body.panel .container {
 .webdav-actions .btn-ie-header {
     flex: 1 1 100px;
 }
+
+.config-backup-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border-2);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.config-backup-section-title {
+    font-size: 13px;
+    font-weight: 650;
+    color: var(--text);
+    letter-spacing: 0.2px;
+}
+
+.config-backup-hint {
+    margin-bottom: 0;
+}

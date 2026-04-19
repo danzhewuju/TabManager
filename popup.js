@@ -155,6 +155,50 @@ class TabManager {
             });
         }
 
+        // 配置导入 / 导出
+        const openConfigBackupBtn = document.getElementById('openConfigBackup');
+        if (openConfigBackupBtn) {
+            openConfigBackupBtn.addEventListener('click', () => {
+                this.openConfigBackupModal();
+            });
+        }
+        const closeConfigBackupBtn = document.getElementById('closeConfigBackupModal');
+        if (closeConfigBackupBtn) {
+            closeConfigBackupBtn.addEventListener('click', () => {
+                this.closeConfigBackupModal();
+            });
+        }
+        const configBackupModal = document.getElementById('configBackupModal');
+        if (configBackupModal) {
+            configBackupModal.addEventListener('click', (e) => {
+                if (e.target === configBackupModal) {
+                    this.closeConfigBackupModal();
+                }
+            });
+        }
+        const configExportBtn = document.getElementById('configExportBtn');
+        if (configExportBtn) {
+            configExportBtn.addEventListener('click', () => {
+                this.exportFullConfig();
+            });
+        }
+        const configImportBtn = document.getElementById('configImportBtn');
+        if (configImportBtn) {
+            configImportBtn.addEventListener('click', () => {
+                const fileInput = document.getElementById('configImportFile');
+                if (!fileInput) return;
+                fileInput.value = '';
+                fileInput.click();
+            });
+        }
+        const configImportFile = document.getElementById('configImportFile');
+        if (configImportFile) {
+            configImportFile.addEventListener('change', (e) => {
+                const file = e.target.files?.[0];
+                if (file) this.handleFullConfigImportFile(file);
+            });
+        }
+
         // 弹窗关闭按钮
         const closeModalBtn = document.getElementById('closeModal');
         if (closeModalBtn) {
@@ -1909,6 +1953,200 @@ class TabManager {
             modal.style.display = 'flex';
             this.fillWebdavFormFromStorage();
         }
+    }
+
+    // ========= 配置导入 / 导出（规则 + WebDAV） =========
+
+    openConfigBackupModal() {
+        const modal = document.getElementById('configBackupModal');
+        if (modal) {
+            modal.style.display = 'flex';
+        }
+        this.configBackupShowError('');
+        this.configBackupSetStatus('');
+        const pwCheckbox = document.getElementById('configExportIncludePassword');
+        if (pwCheckbox) pwCheckbox.checked = false;
+    }
+
+    closeConfigBackupModal() {
+        const modal = document.getElementById('configBackupModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+        this.configBackupShowError('');
+    }
+
+    configBackupShowError(msg) {
+        const el = document.getElementById('configBackupError');
+        if (!el) return;
+        if (msg) {
+            el.textContent = msg;
+            el.style.display = '';
+        } else {
+            el.textContent = '';
+            el.style.display = 'none';
+        }
+    }
+
+    configBackupSetStatus(msg) {
+        const el = document.getElementById('configBackupStatus');
+        if (el) el.textContent = msg || '';
+    }
+
+    async exportFullConfig() {
+        this.configBackupShowError('');
+        try {
+            const includePassword = !!document.getElementById('configExportIncludePassword')?.checked;
+            const cfg = await this.getWebdavMergedConfig();
+
+            const webdav = {
+                baseUrl: cfg.baseUrl || '',
+                remotePath: cfg.remotePath || '',
+                username: cfg.username || '',
+                autoUpload: !!cfg.autoUpload,
+            };
+            if (includePassword) {
+                webdav.password = cfg.password || '';
+            }
+
+            const hasWebdav = !!(webdav.baseUrl || webdav.remotePath || webdav.username || webdav.autoUpload);
+
+            const data = {
+                type: 'tab-manager-config',
+                version: 1,
+                exportedAt: new Date().toISOString(),
+                rules: this.customGroups.map(({ name, pattern, target, color }) => ({
+                    name, pattern, target, color,
+                })),
+                webdav,
+            };
+
+            const json = JSON.stringify(data, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `tab-manager-config-${new Date().toISOString().slice(0, 10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            const parts = [`规则 ${data.rules.length} 条`];
+            if (hasWebdav) {
+                parts.push('WebDAV 配置' + (includePassword ? '（含密码）' : ''));
+            }
+            const summary = parts.join('、');
+            this.configBackupSetStatus(`导出完成：${summary}`);
+            this.showSuccess(`已导出配置：${summary}`);
+        } catch (err) {
+            const msg = err && err.message ? err.message : String(err);
+            this.configBackupShowError(`导出失败：${msg}`);
+        }
+    }
+
+    handleFullConfigImportFile(file) {
+        if (!file) return;
+        this.configBackupShowError('');
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                await this.processFullConfigImport(data);
+            } catch (err) {
+                this.configBackupShowError('文件格式无效，请选择正确的 JSON 文件');
+            }
+        };
+        reader.onerror = () => {
+            this.configBackupShowError('读取文件失败');
+        };
+        reader.readAsText(file);
+    }
+
+    async processFullConfigImport(data) {
+        if (!data || (typeof data !== 'object' && !Array.isArray(data))) {
+            this.configBackupShowError('无法识别的配置文件格式');
+            return;
+        }
+
+        const hasRules = Array.isArray(data) || Array.isArray(data.rules);
+        const hasWebdav = !Array.isArray(data) && data.webdav && typeof data.webdav === 'object';
+
+        if (!hasRules && !hasWebdav) {
+            this.configBackupShowError('文件中未包含可导入的规则或 WebDAV 配置');
+            return;
+        }
+
+        const summaryParts = [];
+        if (hasRules) {
+            const incoming = Array.isArray(data) ? data.length : data.rules.length;
+            summaryParts.push(`规则 ${incoming} 条（将覆盖当前 ${this.customGroups.length} 条）`);
+        }
+        if (hasWebdav) {
+            const withPw = typeof data.webdav.password === 'string';
+            summaryParts.push('WebDAV 配置' + (withPw ? '（含密码）' : ''));
+        }
+        const confirmed = confirm(`即将导入：${summaryParts.join('、')}。\n该操作会覆盖本地对应配置，是否继续？`);
+        if (!confirmed) {
+            this.configBackupSetStatus('已取消导入');
+            return;
+        }
+
+        const appliedParts = [];
+
+        if (hasRules) {
+            try {
+                await this.processImportData(data, { replace: true });
+                appliedParts.push(`规则 ${this.customGroups.length} 条`);
+            } catch (err) {
+                const msg = err && err.message ? err.message : String(err);
+                this.configBackupShowError(`规则导入失败：${msg}`);
+                return;
+            }
+        }
+
+        if (hasWebdav) {
+            try {
+                const w = data.webdav || {};
+                const baseUrl = typeof w.baseUrl === 'string' ? w.baseUrl.trim() : '';
+                const remotePath = typeof w.remotePath === 'string' ? w.remotePath.trim() : '';
+                const username = typeof w.username === 'string' ? w.username.trim() : '';
+                const autoUpload = !!w.autoUpload;
+
+                const prev = await chrome.storage.sync.get('webdavConfig');
+                const prevC = prev.webdavConfig || {};
+                await chrome.storage.sync.set({
+                    webdavConfig: {
+                        ...prevC,
+                        baseUrl,
+                        remotePath,
+                        username,
+                        autoUpload,
+                    },
+                });
+                this._webdavAutoUpload = autoUpload;
+
+                const hasPassword = typeof w.password === 'string';
+                if (hasPassword) {
+                    await chrome.storage.local.set({ webdavPassword: w.password });
+                }
+
+                const webdavModal = document.getElementById('webdavModal');
+                if (webdavModal && webdavModal.style.display !== 'none') {
+                    try { await this.fillWebdavFormFromStorage(); } catch (_) { /* ignore */ }
+                }
+
+                appliedParts.push('WebDAV 配置' + (hasPassword ? '（含密码）' : ''));
+            } catch (err) {
+                const msg = err && err.message ? err.message : String(err);
+                this.configBackupShowError(`WebDAV 配置导入失败：${msg}`);
+                return;
+            }
+        }
+
+        const summary = appliedParts.join('、');
+        this.configBackupSetStatus(`导入完成：${summary}`);
+        this.showSuccess(`已导入配置：${summary}`);
     }
 
     closeWebdavModal() {
