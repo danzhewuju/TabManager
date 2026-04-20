@@ -2686,6 +2686,165 @@ class TabManager {
                 this.renderKeywordSuggestions();
             };
         });
+
+        // 绑定右键菜单：仅对未命中自定义规则的标签（domain / title）
+        container.querySelectorAll('.keyword-btn').forEach(btn => {
+            const idx = parseInt(btn.getAttribute('data-keyword-idx'), 10);
+            const k = keywords[idx];
+            if (!k || k.type === 'custom') return;
+            btn.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.showKeywordContextMenu(e, k);
+            });
+        });
+    }
+
+    // ============ 关键词右键菜单 -> 快速添加自定义规则 ============
+
+    // 基于关键词（及其关联的 tabs）生成一个可直接使用的规则草稿
+    generateQuickRuleFromKeyword(k) {
+        const rawName = (k && k.keyword) ? String(k.keyword) : '未命名';
+
+        // 名称去重（追加 -2、-3 ...）
+        const existingNames = new Set(this.customGroups.map(g => g.name));
+        let name = rawName;
+        if (existingNames.has(name)) {
+            let i = 2;
+            while (existingNames.has(`${rawName}-${i}`)) i++;
+            name = `${rawName}-${i}`;
+        }
+
+        // title 类型：用关键词本身作正则，匹配标题
+        if (k && k.type === 'title') {
+            return { name, pattern: String(k.keyword || ''), target: 'title' };
+        }
+
+        // domain 类型：从关联 tab 的 URL 中提取唯一 hostname，构造 (host1|host2) 形式
+        const hosts = new Set();
+        const ids = Array.isArray(k?.tabIds) ? k.tabIds : [];
+        for (const id of ids) {
+            const tab = this.tabs.find(t => t.id === id);
+            if (!tab || !tab.url) continue;
+            const host = this.getDomain(tab.url);
+            if (host && host !== '(空白标签页)' && host !== 'about:blank') {
+                hosts.add(host);
+            }
+        }
+        const hostList = Array.from(hosts);
+        let pattern;
+        if (hostList.length === 0) {
+            pattern = String(k?.keyword || '');
+        } else if (hostList.length === 1) {
+            pattern = hostList[0];
+        } else {
+            pattern = '(' + hostList.join('|') + ')';
+        }
+        return { name, pattern, target: 'url' };
+    }
+
+    showKeywordContextMenu(e, k) {
+        this.closeKeywordContextMenu();
+
+        // 外层全屏透明遮罩用于捕捉「点击外部」事件，稳定可靠
+        const backdrop = document.createElement('div');
+        backdrop.className = 'tm-context-backdrop';
+
+        const menu = document.createElement('div');
+        menu.className = 'tm-context-menu';
+        menu.addEventListener('mousedown', (ev) => ev.stopPropagation());
+        menu.addEventListener('contextmenu', (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+        });
+
+        const header = document.createElement('div');
+        header.className = 'tm-context-menu-header';
+        header.textContent = `未命中自定义规则：${k.keyword}`;
+        menu.appendChild(header);
+
+        const addItem = document.createElement('div');
+        addItem.className = 'tm-context-menu-item';
+        addItem.innerHTML = `
+            <span class="tm-context-menu-icon">➕</span>
+            <span>添加为自定义规则</span>
+        `;
+        // 用 mousedown 触发，避免 click/blur 时序差异导致无反应；同时兜底绑 click
+        let fired = false;
+        const trigger = (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            if (fired) return;
+            fired = true;
+            this.closeKeywordContextMenu();
+            this.quickAddRuleFromKeyword(k);
+        };
+        addItem.addEventListener('mousedown', trigger);
+        addItem.addEventListener('click', trigger);
+        menu.appendChild(addItem);
+
+        backdrop.appendChild(menu);
+        document.body.appendChild(backdrop);
+
+        // 测量后定位
+        const rect = menu.getBoundingClientRect();
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        let x = e.clientX;
+        let y = e.clientY;
+        if (x + rect.width > vw - 4) x = Math.max(4, vw - rect.width - 4);
+        if (y + rect.height > vh - 4) y = Math.max(4, vh - rect.height - 4);
+        menu.style.left = x + 'px';
+        menu.style.top = y + 'px';
+
+        // 点击遮罩（= 菜单外部）时关闭
+        backdrop.addEventListener('mousedown', () => this.closeKeywordContextMenu());
+        backdrop.addEventListener('contextmenu', (ev) => {
+            // 右键点击外部：关闭当前菜单，但允许默认右键事件继续冒泡到下层（另一个关键词按钮）
+            this.closeKeywordContextMenu();
+        });
+
+        const onKey = (ev) => {
+            if (ev.key === 'Escape') this.closeKeywordContextMenu();
+        };
+        document.addEventListener('keydown', onKey, true);
+
+        this._keywordContextMenu = backdrop;
+        this._keywordContextMenuCleanup = () => {
+            document.removeEventListener('keydown', onKey, true);
+        };
+    }
+
+    closeKeywordContextMenu() {
+        if (this._keywordContextMenu) {
+            try { this._keywordContextMenu.remove(); } catch {}
+            this._keywordContextMenu = null;
+        }
+        if (this._keywordContextMenuCleanup) {
+            try { this._keywordContextMenuCleanup(); } catch {}
+            this._keywordContextMenuCleanup = null;
+        }
+    }
+
+    quickAddRuleFromKeyword(k) {
+        const draft = this.generateQuickRuleFromKeyword(k);
+        this.openGroupSettingsModal();
+        // openGroupSettingsModal 内部会 setTimeout 100ms focus 名称框，这里稍晚一点预填
+        setTimeout(() => {
+            const nameInput = document.getElementById('ruleNameInput');
+            const patternInput = document.getElementById('rulePatternInput');
+            const targetSelect = document.getElementById('ruleTargetSelect');
+            const errorDiv = document.getElementById('ruleError');
+            if (nameInput) nameInput.value = draft.name;
+            if (patternInput) patternInput.value = draft.pattern;
+            if (targetSelect) targetSelect.value = draft.target;
+            if (errorDiv) errorDiv.style.display = 'none';
+            // 让用户可以直接微调正则
+            if (patternInput) {
+                patternInput.focus();
+                try { patternInput.select(); } catch {}
+            }
+        }, 150);
     }
 }
 
