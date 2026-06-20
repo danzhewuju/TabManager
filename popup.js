@@ -49,6 +49,7 @@ class TabManager {
             document.body.classList.add('panel');
         }
 
+        this.syncPopupViewportHeight();
         this.init();
     }
 
@@ -352,7 +353,8 @@ class TabManager {
                     changeInfo.status === 'complete' ||
                     typeof changeInfo.title === 'string' ||
                     typeof changeInfo.url === 'string' ||
-                    typeof changeInfo.favIconUrl === 'string'
+                    typeof changeInfo.favIconUrl === 'string' ||
+                    typeof changeInfo.pinned === 'boolean'
                 ) {
                     schedule();
                 }
@@ -411,8 +413,18 @@ class TabManager {
         if (this._layoutRaf) cancelAnimationFrame(this._layoutRaf);
         this._layoutRaf = requestAnimationFrame(() => {
             this._layoutRaf = null;
+            this.syncPopupViewportHeight();
             this.updateTwoColumnLayout();
         });
+    }
+
+    syncPopupViewportHeight() {
+        const height = Math.floor(window.innerHeight || 0);
+        // Chrome popup 的可视高度由宿主控制；用它约束外层，避免出现最外层滚动条。
+        // 异常过小的值忽略，防止某些预览环境在初始化瞬间把界面压扁。
+        if (height >= 480) {
+            document.documentElement.style.setProperty('--popup-viewport-height', `${height}px`);
+        }
     }
 
     updateTwoColumnLayout() {
@@ -420,14 +432,27 @@ class TabManager {
         const tabsList = document.getElementById('tabsList');
         if (!tabsContainer || !tabsList) return;
 
-        // 规则：如果“单列布局”会溢出（需要滚动），则启用两列。
-        // 注意：两列会改变 scrollHeight，因此必须以“单列”作为判断基准，避免抖动。
+        // 规则：优先不滚动；单列放不下时才启用两列。
+        // 底部安全区只在最终仍然需要滚动时启用，避免内容足够时被 padding 撑出滚动条。
         tabsContainer.classList.remove('two-column');
+        tabsContainer.classList.remove('needs-footer-padding');
 
-        const overflowInSingleColumn = tabsContainer.scrollHeight > tabsContainer.clientHeight + 8;
+        const hasOverflow = () => {
+            const styles = getComputedStyle(tabsContainer);
+            const paddingTop = parseFloat(styles.paddingTop) || 0;
+            const paddingBottom = parseFloat(styles.paddingBottom) || 0;
+            return tabsList.offsetHeight + paddingTop + paddingBottom > tabsContainer.clientHeight + 8;
+        };
+
+        const overflowInSingleColumn = hasOverflow();
 
         if (overflowInSingleColumn) {
             tabsContainer.classList.add('two-column');
+        }
+
+        const overflowAfterLayout = hasOverflow();
+        if (overflowAfterLayout) {
+            tabsContainer.classList.add('needs-footer-padding');
         }
     }
 
@@ -590,6 +615,8 @@ class TabManager {
     renderTabs() {
         const tabsList = document.getElementById('tabsList');
         const tabsContainer = document.querySelector('.tabs-container');
+
+        this.renderPinnedTabs();
         
         if (this.filteredTabs.length === 0) {
             if (tabsContainer) tabsContainer.classList.remove('two-column');
@@ -639,11 +666,7 @@ class TabManager {
                     // 如果点击的是选择区域（复选框或 favicon），忽略（已在 selectArea 处理）
                     if (e.target.closest('.tab-select-area')) return;
                     // 激活标签页
-                    chrome.tabs.update(tab.id, {active: true});
-                    // 激活窗口（如果不在当前窗口）
-                    if (tab.windowId !== undefined) {
-                        chrome.windows.update(tab.windowId, {focused: true});
-                    }
+                    this.activateTab(tab);
                 });
 
                 // 长按拖拽排序（仅同一窗口内）
@@ -659,6 +682,82 @@ class TabManager {
 
         // 在侧边栏/常驻窗口里，首帧自动把“当前 tab”滚到可见区域（便于快速定位）
         this.maybeScrollToCurrentTab();
+    }
+
+    renderPinnedTabs() {
+        const section = document.getElementById('pinnedTabsSection');
+        const list = document.getElementById('pinnedTabsList');
+        const countEl = document.getElementById('pinnedTabsCount');
+        if (!section || !list || !countEl) return;
+
+        const pinnedTabs = this.tabs
+            .filter(tab => tab && tab.pinned)
+            .sort((a, b) => {
+                const aw = typeof a.windowId === 'number' ? a.windowId : 0;
+                const bw = typeof b.windowId === 'number' ? b.windowId : 0;
+                if (aw !== bw) return aw - bw;
+                return (a.index ?? 0) - (b.index ?? 0);
+            });
+
+        countEl.textContent = String(pinnedTabs.length);
+
+        if (pinnedTabs.length === 0) {
+            section.hidden = true;
+            list.innerHTML = '';
+            return;
+        }
+
+        section.hidden = false;
+        list.innerHTML = pinnedTabs.map(tab => this.createPinnedTabElement(tab)).join('');
+
+        pinnedTabs.forEach(tab => {
+            const item = document.querySelector(`.pinned-tab-item[data-pinned-tab-id="${tab.id}"]`);
+            if (!item) return;
+            item.addEventListener('click', () => {
+                this.activateTab(tab);
+            });
+        });
+    }
+
+    createPinnedTabElement(tab) {
+        const isCurrent = (typeof this.currentTabId === 'number')
+            && tab.id === this.currentTabId
+            && (this.currentWindowId == null || tab.windowId === this.currentWindowId);
+        const favicon = tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23ccc"/></svg>';
+        const safeTitle = (tab.title && String(tab.title).trim().length > 0)
+            ? tab.title
+            : (tab.url && String(tab.url).trim().length > 0 ? tab.url : '(空白标签页)');
+        const domain = this.getDomain(tab.url);
+        const positionText = Number.isInteger(tab.index) ? `#${tab.index + 1}` : '#?';
+
+        return `
+            <button type="button" class="pinned-tab-item ${isCurrent ? 'is-current' : ''}" data-pinned-tab-id="${tab.id}" title="${this.escapeHtml(safeTitle)}">
+                <img src="${favicon}" alt="favicon" class="pinned-tab-favicon" onerror="this.style.display='none'">
+                <span class="pinned-tab-content">
+                    <span class="pinned-tab-title-row">
+                        <span class="pinned-tab-title">${this.escapeHtml(safeTitle)}</span>
+                        ${isCurrent ? '<span class="pinned-tab-current-badge">当前</span>' : ''}
+                        <span class="pinned-tab-position">${positionText}</span>
+                    </span>
+                    <span class="pinned-tab-url" title="${this.escapeHtml(tab.url || '')}">${this.escapeHtml(domain)}</span>
+                </span>
+            </button>
+        `;
+    }
+
+    async activateTab(tab) {
+        if (!tab || typeof tab.id !== 'number') return;
+
+        try {
+            chrome.tabs.update(tab.id, { active: true });
+            // 激活窗口（如果不在当前窗口）
+            if (tab.windowId !== undefined) {
+                chrome.windows.update(tab.windowId, { focused: true });
+            }
+        } catch (error) {
+            console.warn('跳转标签页失败:', error);
+            this.showError('跳转标签页失败');
+        }
     }
 
     createTabElement(tab) {

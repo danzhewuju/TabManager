@@ -25,13 +25,16 @@
     --shadow-md: 0 14px 34px rgba(0, 0, 0, 0.42);
     --shadow-sm: 0 6px 16px rgba(0, 0, 0, 0.35);
     --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --popup-height: 720px;
+    --popup-viewport-height: var(--popup-height);
+    --footer-reserved-height: 68px;
 }
 
 /* Chrome 扩展 popup 的窗口尺寸最好直接由 html/body 决定，
    否则某些情况下会出现窗口被算成很窄导致内容被裁切。 */
 html, body {
     width: 520px;
-    height: 600px;
+    height: min(var(--popup-height), var(--popup-viewport-height));
     overflow: hidden;
 }
 
@@ -62,8 +65,9 @@ body {
 /* 插件的布局 */
 .container {
     width: 520px;
-    height: 600px;
-    min-height: 560px;
+    height: min(var(--popup-height), var(--popup-viewport-height));
+    min-height: 0;
+    padding-bottom: var(--footer-reserved-height);
     background: linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(15, 23, 42, 0.92) 100%);
     border-radius: var(--radius);
     border: 1px solid var(--border);
@@ -93,12 +97,12 @@ body.panel .container {
 @media (min-width: 700px) {
     html, body {
         width: 100%;
-        height: 100%;
-        overflow: auto;
+        height: var(--popup-viewport-height);
+        overflow: hidden;
     }
 
     body {
-        min-height: 100vh;
+        min-height: 0;
         padding: 28px;
         display: flex;
         justify-content: center;
@@ -107,8 +111,9 @@ body.panel .container {
 
     .container {
         width: min(920px, 96vw);
-        height: min(760px, calc(100vh - 56px));
-        min-height: 560px;
+        height: calc(var(--popup-viewport-height) - 56px);
+        max-height: 760px;
+        min-height: 0;
     }
 }
 
@@ -148,6 +153,7 @@ body.panel .container {
 }
 
 .header {
+    flex: 0 0 auto;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -184,6 +190,7 @@ body.panel .container {
 }
 
 .search-container {
+    flex: 0 0 auto;
     padding: 10px 12px;
     background: linear-gradient(180deg, rgba(17, 28, 51, 0.70), rgba(17, 28, 51, 0.55));
     border-bottom: 1px solid var(--border-2);
@@ -334,11 +341,165 @@ body.panel .container {
     box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.20);
 }
 
+.pinned-tabs-section {
+    margin: 2px 0 10px;
+    padding: 8px;
+    border: 1px solid rgba(34, 211, 238, 0.18);
+    border-radius: 12px;
+    background: rgba(34, 211, 238, 0.06);
+}
+
+.pinned-tabs-section[hidden] {
+    display: none;
+}
+
+.pinned-tabs-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 7px;
+}
+
+.pinned-tabs-title {
+    font-size: 12px;
+    font-weight: 750;
+    color: var(--text);
+}
+
+.pinned-tabs-count {
+    min-width: 22px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: rgba(34, 211, 238, 0.14);
+    border: 1px solid rgba(34, 211, 238, 0.24);
+    color: var(--muted-2);
+    font-size: 11px;
+    font-family: var(--mono);
+    text-align: center;
+}
+
+.pinned-tabs-list {
+    display: flex;
+    gap: 7px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 2px;
+    scrollbar-width: thin;
+}
+
+.pinned-tabs-list::-webkit-scrollbar {
+    height: 6px;
+}
+
+.pinned-tabs-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.pinned-tabs-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+}
+
+.pinned-tab-item {
+    flex: 0 0 150px;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 8px;
+    border: 1px solid var(--border-2);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.055);
+    color: var(--text);
+    cursor: pointer;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.pinned-tab-item:hover {
+    border-color: rgba(34, 211, 238, 0.32);
+    background: rgba(34, 211, 238, 0.10);
+    box-shadow: var(--shadow-sm);
+    transform: translateY(-1px);
+}
+
+.pinned-tab-item.is-current {
+    border-color: rgba(34, 211, 238, 0.52);
+    background: rgba(34, 211, 238, 0.13);
+}
+
+.pinned-tab-favicon {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.pinned-tab-content {
+    min-width: 0;
+    flex: 1;
+}
+
+.pinned-tab-title-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+}
+
+.pinned-tab-title {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.pinned-tab-url {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--muted);
+    font-size: 11px;
+    font-family: var(--mono);
+}
+
+.pinned-tab-position {
+    flex-shrink: 0;
+    padding: 1px 5px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-2);
+    color: var(--muted-2);
+    font-size: 10px;
+    font-family: var(--mono);
+}
+
+.pinned-tab-current-badge {
+    flex-shrink: 0;
+    padding: 1px 5px;
+    border-radius: 999px;
+    background: rgba(34, 211, 238, 0.18);
+    border: 1px solid rgba(34, 211, 238, 0.35);
+    color: var(--text);
+    font-size: 10px;
+    font-weight: 750;
+}
+
 .tabs-container {
-    flex: 1 1 auto;
+    flex: 1 1 0;
+    min-height: 0;
     overflow-y: auto;
     padding: 8px 10px 10px;
     max-height: none;
+}
+
+.tabs-container.needs-footer-padding {
+    padding-bottom: calc(10px + var(--footer-reserved-height));
 }
 
 .tabs-list {
@@ -572,12 +733,38 @@ body.panel .container {
 }
 
 .footer {
+    flex: 0 0 auto;
+    position: fixed;
+    left: 0;
+    right: auto;
+    bottom: 0;
+    z-index: 50;
+    width: 520px;
     padding: 10px 12px;
     background: linear-gradient(180deg, rgba(17, 28, 51, 0.62), rgba(17, 28, 51, 0.52));
     border-top: 1px solid var(--border-2);
     display: flex;
     justify-content: space-between;
     align-items: center;
+}
+
+@media (min-width: 700px) {
+    body:not(.standalone):not(.panel) .footer {
+        left: 50%;
+        right: auto;
+        bottom: 28px;
+        width: min(920px, calc(100vw - 56px));
+        transform: translateX(-50%);
+    }
+}
+
+body.standalone .footer,
+body.panel .footer {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    transform: none;
 }
 
 .stats {
